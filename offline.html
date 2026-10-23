@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="am">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>ከመስመር ውጭ · Offline</title>
+<meta name="theme-color" content="#0d2f57">
+<link rel="icon" type="image/png" href="assets/logo.png">
+<link rel="stylesheet" href="css/fonts.css">
+<style>
+  :root{
+    --navy:#0d2f57; --ink:#14263a; --muted:#5c6f84; --bg:#f1f5fa;
+    --line:#e1e9f2; --gold:#c9a227; --amber:#b7791f; --amber-bg:#fdf6e6;
+    --font:'Inter','Noto Sans Ethiopic',system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0; font-family:var(--font); background:var(--bg); color:var(--ink);
+    display:flex; align-items:center; justify-content:center; padding:28px;
+    -webkit-font-smoothing:antialiased;
+  }
+  .card{
+    width:100%; max-width:520px; background:#fff; border:1px solid var(--line);
+    border-radius:18px; padding:38px 32px 30px; text-align:center;
+    box-shadow:0 18px 44px rgba(13,47,87,.09);
+  }
+  .logo{width:72px;height:72px;object-fit:contain;margin-bottom:18px}
+  h1{font-size:1.35rem;margin:0 0 6px;letter-spacing:-.01em}
+  h2{font-size:1rem;font-weight:600;color:var(--muted);margin:0 0 20px}
+  p{color:var(--muted);font-size:.92rem;line-height:1.65;margin:0 0 8px}
+  .rule{height:1px;background:var(--line);margin:22px 0}
+  .note{
+    background:var(--amber-bg); border:1px solid #f0e0b4; color:#7a5b10;
+    border-radius:12px; padding:13px 15px; font-size:.86rem; text-align:start;
+    line-height:1.6; margin-bottom:20px;
+  }
+  .note strong{color:#5f460a}
+  .row{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
+  button,a.btn{
+    font-family:inherit; font-size:.9rem; font-weight:600; cursor:pointer;
+    padding:11px 22px; border-radius:11px; border:1px solid var(--line);
+    background:#fff; color:var(--ink); text-decoration:none; transition:.15s;
+  }
+  button.primary{background:var(--navy);border-color:var(--navy);color:#fff}
+  button:hover,a.btn:hover{transform:translateY(-1px);box-shadow:0 6px 16px rgba(13,47,87,.12)}
+  .state{
+    display:inline-flex;align-items:center;gap:8px;font-size:.83rem;font-weight:600;
+    padding:6px 13px;border-radius:999px;background:#fdecea;color:#8c2f22;margin-bottom:16px;
+  }
+  .state.on{background:#e7f6ed;color:#0e4c30}
+  .dot{width:8px;height:8px;border-radius:50%;background:currentColor}
+  .foot{font-size:.78rem;color:var(--muted);margin-top:20px}
+  @media (max-width:420px){ .card{padding:30px 20px 24px} }
+</style>
+</head>
+<body>
+  <main class="card">
+    <img class="logo" src="assets/logo.png" alt="">
+    <div class="state" id="state"><span class="dot"></span><span id="stateTxt">ከመስመር ውጭ · Offline</span></div>
+    <h1>ከመስመር ውጭ ነዎት</h1>
+    <h2>You are offline</h2>
+
+    <p>ወደ አገልጋዩ መገናኘት አልተቻለም። ኢንተርኔትዎ ሲመለስ ገጹ በራሱ ይከፈታል።</p>
+    <p>The server could not be reached. This page reloads itself as soon as the connection returns.</p>
+
+    <div class="rule"></div>
+
+    <div class="note">
+      <strong>የተመዘገበ መገኘት አልጠፋም።</strong> ከመስመር ውጭ ሆነው የሠሩት የመገኘት ምዝገባ በመሣሪያዎ ላይ ተቀምጦ፣ ግንኙነት ሲመለስ በራሱ ወደ ዳታቤዙ ይላካል።
+      <br><br>
+      <strong>Nothing you marked is lost.</strong> Attendance taken offline is held in a local queue on this device and
+      is sent to the database automatically once you are back online.
+    </div>
+
+    <div class="row">
+      <button class="primary" type="button" onclick="location.reload()">እንደገና ሞክር · Retry</button>
+      <a class="btn" href="index.php">ወደ መነሻ · Home</a>
+    </div>
+
+    <p class="foot">ቅዱስ ሩፋኤል ሰንበት ትምህርት ቤት · St. Rufael Church School</p>
+  </main>
+
+<script>
+(function () {
+  var st = document.getElementById('state'), tx = document.getElementById('stateTxt');
+  function paint() {
+    if (navigator.onLine) {
+      st.classList.add('on');
+      tx.textContent = 'ግንኙነት ተመልሷል · Back online';
+      setTimeout(function () { location.replace('index.php'); }, 900);
+    } else {
+      st.classList.remove('on');
+      tx.textContent = 'ከመስመር ውጭ · Offline';
+    }
+  }
+  window.addEventListener('online', paint);
+  window.addEventListener('offline', paint);
+  paint();
+  /* quiet poll, in case the online event never fires */
+  setInterval(function () {
+    fetch('assets/logo.png', { method: 'HEAD', cache: 'no-store' })
+      .then(function () { location.replace('index.php'); })
+      .catch(function () {});
+  }, 8000);
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,4 @@
+# St. Rufael attendance platform — a private school administration
+# system. Nothing here should ever appear in a search index.
+User-agent: *
+Disallow: /
