@@ -1,11 +1,7 @@
 <?php
 /* ============================================================
-   auth/new-password.php — first-time password change.
-
-   Reached only by a signed-in user whose must_change_pw flag is
-   set, i.e. someone who arrived with a temporary password issued
-   by an administrator. Until they choose a real password every
-   other page bounces them back here (see index.php).
+   auth/new-password.php — forced password change on first login
+   or after an admin reset. Styled to match Google Stitch design.
    ============================================================ */
 require_once __DIR__ . '/../config/config.php';
 require_once __DIR__ . '/../config/database.php';
@@ -13,344 +9,256 @@ require_once __DIR__ . '/../config/auth.php';
 require_once __DIR__ . '/../lib/helpers.php';
 
 if (!sr_is_installed()) { header('Location: ../install.php'); exit; }
-
 $user = current_user();
-if (!$user)                              { header('Location: login.php'); exit; }
-if ((int)$user['must_change_pw'] !== 1)  { header('Location: ../index.php'); exit; }
+if (!$user) { header('Location: login.php'); exit; }
+if ((int)($user['must_change_pw'] ?? 0) !== 1) { header('Location: ../index.php'); exit; }
 
-/* Same language source as the rest of the app: the login page stores
-   sr_lang in a cookie (the SPA keeps it in sync), so a user working in
-   English sees this page in English too — never a stray Amharic copy. */
-$cookie = $_COOKIE['sr_lang'] ?? '';
-$lang   = ($_GET['lang'] ?? '') !== '' ? $_GET['lang'] : ($cookie !== '' ? $cookie : ($user['lang'] ?? 'am'));
-if ($lang !== 'am' && $lang !== 'en') $lang = 'am';
-
-try {
-    $s      = settings_all(true);
-    $nameAm = $s['school_name_am'] ?? APP_NAME_AM;
-    $nameEn = $s['school_name_en'] ?? APP_NAME_EN;
-    /* Honour Settings -> Identity name here too (see lib/helpers.php):
-       with "always Amharic" on, both faces of this page carry the
-       Amharic name. */
-    if (!empty($s['brand_always_amharic']) && $nameAm !== '') $nameEn = $nameAm;
-} catch (Throwable $e) {
-    $nameAm = APP_NAME_AM; $nameEn = APP_NAME_EN;
-}
-$csrf = csrf_token();
-$am   = $lang === 'am';
+$next = trim((string)($_GET['next'] ?? ''));
+if ($next !== '' && ($next[0] === '/' || strpos($next, '://') !== false || strpos($next, '..') !== false)) $next = '';
+$schoolAm = setting('school_name_am', APP_NAME_AM);
+$schoolEn = setting('school_name_en', APP_NAME_EN);
+if (sr_brand_always_amharic() && $schoolAm !== '') $schoolEn = $schoolAm;
 ?>
 <!doctype html>
-<html lang="<?= $lang ?>" dir="ltr">
+<html lang="am">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#0d2f57">
-<meta name="robots" content="noindex,nofollow">
-<title><?= e($am ? 'አዲስ የይለፍ ቃል' : 'Set a new password') ?> · <?= e($am ? $nameAm : $nameEn) ?></title>
-<link rel="icon" href="../assets/logo.png">
-<link rel="stylesheet" href="../css/fonts.min.css">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#004C9D">
+<link rel="manifest" href="../manifest.json">
+<link rel="icon" type="image/png" href="../assets/logo.png">
+<title><?= e($schoolAm) ?> · New password</title>
+<link rel="stylesheet" href="../css/fonts.min.css?v=<?= e(APP_VERSION) ?>">
 <style>
-:root{
-  --blue-950:#081f3c; --blue-900:#0d2f57; --blue-800:#123f75; --blue-700:#1753a0;
-  --blue-600:#1e64c0; --blue-500:#2f7fd4; --blue-300:#9cc2ec; --blue-100:#dbe9f8; --blue-50:#eef5fd;
-  --gold:#c9a227; --gold-100:#f7efda;
-  --ink:#14263a; --muted:#5c6f84; --bg:#f1f5fa; --card:#fff; --line:#e1e9f2;
-  --red:#b3372b; --red-bg:#fdeceb; --green:#146c43; --green-bg:#e4f5ec;
-  --amber:#8a6100; --amber-bg:#fdf3dc; --amber-line:#eed9a4;
-  --shadow-md:0 4px 14px rgba(13,47,87,.10),0 1px 4px rgba(13,47,87,.07);
-  --shadow-lg:0 14px 38px rgba(13,47,87,.16);
-  --font:'Inter','Noto Sans Ethiopic',system-ui,'Segoe UI',Roboto,Arial,sans-serif;
-}
-*,*::before,*::after{box-sizing:border-box}
-body{margin:0;font-family:var(--font);color:var(--ink);font-size:15px;line-height:1.55;
-  -webkit-font-smoothing:antialiased;min-height:100dvh;display:flex;align-items:center;justify-content:center;
-  padding:32px 20px;background:
-    radial-gradient(760px 300px at 108% -60px,rgba(47,127,212,.09),transparent 60%),
-    radial-gradient(520px 260px at -80px 112%,rgba(201,162,39,.08),transparent 58%),var(--bg)}
-:focus-visible{outline:2px solid var(--gold);outline-offset:2px;border-radius:6px}
-img{display:block;max-width:100%}
-.box{width:100%;max-width:440px}
-.mark{display:flex;align-items:center;gap:12px;margin-bottom:22px}
-.mark img{width:48px;height:48px;border-radius:12px;background:#fff;padding:5px;box-shadow:var(--shadow-md)}
-.mark b{font-size:1rem;display:block;letter-spacing:.1px}
-.mark span{display:block;font-size:.78rem;color:var(--muted)}
-.card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:28px 26px;box-shadow:var(--shadow-lg)}
-.key{width:46px;height:46px;border-radius:13px;display:flex;align-items:center;justify-content:center;
-  background:linear-gradient(135deg,var(--blue-700),var(--blue-500));color:#fff;margin-bottom:16px;
-  box-shadow:0 4px 14px rgba(23,83,160,.28)}
-.key svg{width:23px;height:23px;stroke:currentColor;fill:none;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
-h1{font-size:1.42rem;margin:0 0 7px;font-weight:800;letter-spacing:-.3px}
-.lede{color:var(--muted);margin:0 0 20px;font-size:.92rem}
-.who{display:flex;align-items:center;gap:10px;background:var(--blue-50);border:1px solid var(--blue-100);
-  border-radius:12px;padding:10px 13px;margin-bottom:18px}
-.who .av{width:34px;height:34px;border-radius:50%;background:var(--blue-700);color:#fff;font-weight:700;
-  font-size:.82rem;display:flex;align-items:center;justify-content:center;flex:none}
-.who b{display:block;font-size:.9rem;line-height:1.3}
-.who span{display:block;font-size:.78rem;color:var(--muted)}
-.note{display:flex;gap:9px;background:var(--amber-bg);border:1px solid var(--amber-line);color:var(--amber);
-  border-radius:12px;padding:11px 13px;font-size:.85rem;margin-bottom:20px}
-.note svg{width:17px;height:17px;flex:none;margin-top:2px;stroke:currentColor;fill:none;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
-.field{margin-bottom:15px}
-label{display:block;font-size:.83rem;font-weight:650;margin-bottom:6px}
-.inp{position:relative;display:flex;align-items:center}
-.inp > svg{position:absolute;left:13px;width:17px;height:17px;stroke:var(--muted);fill:none;stroke-width:1.8;
-  stroke-linecap:round;stroke-linejoin:round;pointer-events:none}
-input[type=password],input[type=text]{width:100%;font-family:inherit;font-size:.97rem;color:var(--ink);
-  padding:12px 44px 12px 40px;border:1.5px solid var(--line);border-radius:11px;background:#fbfdff;
-  transition:border-color .15s,box-shadow .15s}
-input:focus{outline:none;border-color:var(--blue-500);box-shadow:0 0 0 3.5px rgba(47,127,212,.16);background:#fff}
-input[aria-invalid=true]{border-color:var(--red);box-shadow:0 0 0 3.5px rgba(179,55,43,.13)}
-.peek{position:absolute;right:6px;background:none;border:0;padding:8px;border-radius:8px;color:var(--muted);display:flex;cursor:pointer}
-.peek:hover{color:var(--blue-700);background:var(--blue-50)}
-.peek svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+  :root{
+    --primary:#004C9D; --primary-container:#1E64C0; --surface-container:#E5EEFF;
+    --surface-low:#EFF4FF; --surface:#F8F9FF; --card:#FFFFFF; --subtle:#E8EFF8;
+    --gold-soft:#FBF6E9; --gold-container:#FED255;
+    --ink:#0D2F57; --muted:#64748B; --line:#E2E8F0;
+    --bad:#DC2626; --bad-bg:#FEE2E2; --bad-ink:#991B1B;
+    --ok:#16A34A; --ok-bg:#DCFCE7;
+    --font:'Plus Jakarta Sans','Inter','Noto Sans Ethiopic',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0}
+  body{
+    font:400 14.5px/1.55 var(--font);color:var(--ink);
+    background:
+      radial-gradient(640px 420px at 88% 8%, rgba(254,210,85,.18), transparent 65%),
+      radial-gradient(680px 460px at 10% 18%, rgba(30,100,192,.10), transparent 65%),
+      var(--surface);
+    display:grid;place-items:center;padding:24px 18px;
+    -webkit-font-smoothing:antialiased;
+  }
+  .shell{width:100%;max-width:464px;display:flex;flex-direction:column;gap:14px}
+  .top-row{display:flex;align-items:center;justify-content:space-between;gap:12px}
+  .brand{display:flex;align-items:center;gap:12px;min-width:0}
+  .seal{
+    width:46px;height:46px;border-radius:50%;padding:3px;flex:0 0 auto;
+    background:var(--card);box-shadow:0 4px 14px rgba(13,47,87,.12),0 0 0 1px rgba(236,194,70,.4);
+    display:grid;place-items:center;
+  }
+  .seal img{width:100%;height:100%;border-radius:50%;object-fit:cover;display:block}
+  .brand b{display:block;font-size:15px;font-weight:700;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .brand span{font-size:12px;color:var(--muted)}
 
-.meter{display:flex;gap:5px;margin-top:9px}
-.meter i{flex:1;height:4px;border-radius:999px;background:#e6edf5;transition:background .2s}
-.meter.s1 i:nth-child(1){background:#d1584a}
-.meter.s2 i:nth-child(-n+2){background:#d99a2b}
-.meter.s3 i:nth-child(-n+3){background:#4a9d6a}
-.meter.s4 i{background:var(--green)}
-.smsg{font-size:.78rem;color:var(--muted);margin-top:6px;min-height:1.1em}
+  .lang{
+    display:inline-flex;align-items:center;padding:3px;border-radius:9999px;
+    background:var(--subtle);flex:0 0 auto;
+  }
+  .lang button{
+    border:0;background:transparent;padding:5px 11px;border-radius:9999px;
+    font:600 12px/1.2 var(--font);color:var(--muted);cursor:pointer;
+  }
+  .lang button.on{background:var(--card);color:var(--ink);box-shadow:0 2px 6px rgba(13,47,87,.10)}
 
-.rules{list-style:none;margin:6px 0 20px;padding:0;font-size:.82rem;color:var(--muted)}
-.rules li{display:flex;align-items:center;gap:8px;padding:3px 0}
-.rules li::before{content:"";width:15px;height:15px;border-radius:50%;border:1.6px solid #cfdae7;flex:none;
-  background-repeat:no-repeat;background-position:center;transition:.15s}
-.rules li.ok{color:var(--green)}
-.rules li.ok::before{border-color:var(--green);background-color:var(--green);
-  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m5 12.5 4.5 4.5L19 7'/%3E%3C/svg%3E");
-  background-size:10px}
+  .card{
+    background:var(--card);border:1px solid rgba(226,232,240,.65);border-radius:24px;
+    padding:26px 24px;box-shadow:0 10px 32px -6px rgba(13,47,87,.08),0 2px 6px rgba(13,47,87,.03);
+  }
+  h1{margin:0 0 6px;font-size:20px;font-weight:700;letter-spacing:-.015em;color:var(--ink)}
+  .sub{margin:0 0 20px;color:var(--muted);font-size:13.5px;line-height:1.55}
+  .field{margin-bottom:14px}
+  label{display:block;font-size:12.5px;font-weight:600;color:var(--ink);margin-bottom:6px}
+  .inp-wrap{
+    position:relative;display:flex;align-items:center;
+    background:var(--surface);border:1.5px solid var(--subtle);
+    border-radius:14px;transition:background .16s,border-color .16s,box-shadow .16s;
+  }
+  .inp-wrap:focus-within{
+    background:var(--card);border-color:var(--primary-container);
+    box-shadow:0 0 0 3.5px rgba(30,100,192,.14);
+  }
+  .inp-ico{padding:0 2px 0 13px;color:var(--muted);display:grid;place-items:center;pointer-events:none}
+  input{
+    width:100%;height:46px;padding:0 14px 0 10px;border:0;border-radius:14px;
+    font:500 14.5px var(--font);color:var(--ink);background:transparent;outline:none;
+  }
+  .meter{height:6px;border-radius:9999px;background:var(--subtle);overflow:hidden;margin-top:8px}
+  .meter i{display:block;height:100%;width:0;background:var(--bad);border-radius:9999px;transition:width .2s,background .2s}
+  .rules{margin:12px 0 18px;padding:12px 14px;border-radius:14px;background:var(--surface-low);list-style:none;font-size:12.5px;color:var(--muted)}
+  .rules li{padding:3px 0;display:flex;align-items:center;gap:8px;font-weight:500}
+  .rules li::before{
+    content:"";width:8px;height:8px;border-radius:50%;background:#CBD5E1;flex:0 0 auto;
+    transition:background .16s,transform .16s;
+  }
+  .rules li.ok{color:var(--ok)}
+  .rules li.ok::before{background:var(--ok);transform:scale(1.15)}
 
-.btn{width:100%;border:0;border-radius:11px;padding:13px 18px;font-size:.99rem;font-weight:700;color:#fff;cursor:pointer;
-  background:linear-gradient(135deg,var(--blue-700),var(--blue-600));box-shadow:0 3px 12px rgba(23,83,160,.30);
-  display:flex;align-items:center;justify-content:center;gap:10px;transition:filter .15s,transform .06s}
-.btn:hover:not(:disabled){filter:brightness(1.07)}
-.btn:active:not(:disabled){transform:translateY(1px)}
-.btn:disabled{opacity:.6;cursor:not-allowed}
-.btn.loading{cursor:progress}
-.spin{width:17px;height:17px;border:2.4px solid rgba(255,255,255,.4);border-top-color:#fff;border-radius:50%;
-  animation:sp .7s linear infinite;display:none}
-.btn.loading .spin{display:block}
-@keyframes sp{to{transform:rotate(360deg)}}
+  .btn{
+    width:100%;height:50px;border:0;border-radius:9999px;cursor:pointer;
+    background:linear-gradient(135deg,var(--primary) 0%,var(--primary-container) 100%);
+    color:#fff;font:600 15px var(--font);
+    box-shadow:0 8px 20px -4px rgba(0,76,157,.34);
+    transition:filter .16s,transform .14s;
+  }
+  .btn:hover{filter:brightness(1.05)}
+  .btn:active{transform:scale(.985)}
+  .btn:disabled{opacity:.55;cursor:not-allowed;transform:none}
 
-.alert{display:none;align-items:flex-start;gap:10px;padding:11px 13px;border-radius:11px;font-size:.88rem;
-  margin-bottom:16px;border:1px solid transparent}
-.alert.show{display:flex}
-.alert.err{background:var(--red-bg);border-color:#f3c6c1;color:#7d241b}
-.alert.ok{background:var(--green-bg);border-color:#bfe3ce;color:#0e4c30}
-.alert svg{width:17px;height:17px;flex:none;margin-top:1px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
-.foot{text-align:center;margin-top:18px;font-size:.79rem;color:var(--muted)}
-.foot a{color:var(--blue-600);text-decoration:none}
-.foot a:hover{text-decoration:underline}
-@media (max-width:520px){
-  .card{padding:22px 18px;border-radius:16px} h1{font-size:1.28rem}
-  
-  .mark{flex-direction:column;align-items:center;text-align:center;gap:10px;margin-bottom:24px}
-  .mark img{width:58px;height:58px}
-}
-@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
-
-</style></head>
+  .msg{display:none;margin:0 0 14px;padding:11px 14px;border-radius:14px;font-size:13px;
+       background:var(--bad-bg);color:var(--bad-ink);border:1px solid #FECACA}
+  .msg.show{display:block}
+  .out{display:flex;justify-content:center;margin-top:14px;font-size:12.5px}
+  .out a{color:var(--muted);text-decoration:none;font-weight:500;padding:4px 10px;border-radius:9999px}
+  .out a:hover{color:var(--ink);background:var(--subtle)}
+</style>
+</head>
 <body>
-<main class="box">
-
-  <div class="mark">
-    <img src="../assets/logo.png" alt="">
-    <div>
-      <b><?= e($am ? $nameAm : $nameEn) ?></b>
-      <span><?= e($am ? 'የተማሪ መገኘት አስተዳደር' : 'Student attendance management') ?></span>
+<div class="shell">
+  <div class="top-row">
+    <div class="brand">
+      <div class="seal"><img src="../assets/logo.png" alt=""></div>
+      <div>
+        <b id="schoolName"><?= e($schoolAm) ?></b>
+        <span id="signedAs"><?= e($user['full_name']) ?> · @<?= e($user['username']) ?></span>
+      </div>
+    </div>
+    <div class="lang" role="group" aria-label="Language">
+      <button type="button" data-lang="am">አማርኛ</button>
+      <button type="button" data-lang="en">English</button>
     </div>
   </div>
 
-  <div class="card">
-    <div class="key" aria-hidden="true">
-      <svg viewBox="0 0 24 24"><rect x="4" y="10.5" width="16" height="10" rx="2.5"/><path d="M8 10.5V7a4 4 0 0 1 8 0v3.5"/><circle cx="12" cy="15.5" r="1.3" fill="currentColor" stroke="none"/></svg>
-    </div>
+  <main class="card">
+    <h1 data-t="title">አዲስ የይለፍ ቃል ይምረጡ</h1>
+    <p class="sub" data-t="sub">ለመቀጠል እባክዎ የራስዎን የይለፍ ቃል ያዘጋጁ። ይህ የሚጠየቀው አንድ ጊዜ ብቻ ነው።</p>
 
-    <h1><?= e($am ? 'አዲስ የይለፍ ቃል ያስገቡ' : 'Set your new password') ?></h1>
-    <p class="lede">
-      <?= e($am
-        ? 'ወደ ሥርዓቱ የገቡት በጊዜያዊ የይለፍ ቃል ነው። ከመቀጠልዎ በፊት የራስዎን የይለፍ ቃል ይምረጡ።'
-        : 'You signed in with a temporary password. Choose your own password before you continue.') ?>
-    </p>
+    <div class="msg" id="err" role="alert"></div>
 
-    <div class="who">
-      <div class="av"><?= e(mb_strtoupper(mb_substr($user['full_name'] ?: $user['username'], 0, 1))) ?></div>
-      <div>
-        <b><?= e($user['full_name']) ?></b>
-        <span><?= e($user['username']) ?></span>
-      </div>
-    </div>
-
-    <div class="note">
-      <svg viewBox="0 0 24 24"><path d="M12 3 2.5 20h19z"/><path d="M12 9.5v4.5M12 17.2v.3"/></svg>
-      <span><?= e($am
-        ? 'ጊዜያዊው የይለፍ ቃል ከአሁን በኋላ አይሠራም። አዲሱን የይለፍ ቃል ለማንም አያካፍሉ።'
-        : 'The temporary password stops working once you finish. Keep your new password private.') ?></span>
-    </div>
-
-    <div class="alert err" id="errBox" role="alert">
-      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7.5v5M12 16v.4"/></svg>
-      <span id="errTxt"></span>
-    </div>
-    <div class="alert ok" id="okBox" role="status">
-      <svg viewBox="0 0 24 24"><path d="m4.5 12.5 5 5 10-11"/></svg>
-      <span id="okTxt"></span>
-    </div>
-
-    <form id="pwForm" autocomplete="off" novalidate>
+    <form id="pwForm" novalidate>
       <div class="field">
-        <label for="np"><?= e($am ? 'አዲስ የይለፍ ቃል' : 'New password') ?></label>
-        <div class="inp">
-          <svg viewBox="0 0 24 24"><rect x="4" y="10.5" width="16" height="10" rx="2.5"/><path d="M8 10.5V7a4 4 0 0 1 8 0v3.5"/></svg>
-          <input type="password" id="np" name="new_password" autocomplete="new-password" required>
-          <button type="button" class="peek" id="np-peek" aria-label="<?= e($am ? 'አሳይ' : 'Show') ?>">
-            <svg viewBox="0 0 24 24"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z"/><circle cx="12" cy="12" r="3"/></svg>
-          </button>
+        <label for="np" data-t="newpw">አዲስ የይለፍ ቃል</label>
+        <div class="inp-wrap">
+          <span class="inp-ico" aria-hidden="true">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+          </span>
+          <input id="np" type="password" autocomplete="new-password" required autofocus>
         </div>
-        <div class="meter" id="meter"><i></i><i></i><i></i><i></i></div>
-        <div class="smsg" id="smsg"></div>
+        <div class="meter" id="meter"><i id="bar"></i></div>
       </div>
-
       <div class="field">
-        <label for="cp"><?= e($am ? 'የይለፍ ቃሉን ያረጋግጡ' : 'Confirm password') ?></label>
-        <div class="inp">
-          <svg viewBox="0 0 24 24"><rect x="4" y="10.5" width="16" height="10" rx="2.5"/><path d="M8 10.5V7a4 4 0 0 1 8 0v3.5"/></svg>
-          <input type="password" id="cp" name="confirm_password" autocomplete="new-password" required>
-          <button type="button" class="peek" id="cp-peek" aria-label="<?= e($am ? 'አሳይ' : 'Show') ?>">
-            <svg viewBox="0 0 24 24"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z"/><circle cx="12" cy="12" r="3"/></svg>
-          </button>
+        <label for="cp" data-t="confirm">አዲሱን የይለፍ ቃል ያረጋግጡ</label>
+        <div class="inp-wrap">
+          <span class="inp-ico" aria-hidden="true">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M20 6 9 17l-5-5"/></svg>
+          </span>
+          <input id="cp" type="password" autocomplete="new-password" required>
         </div>
       </div>
 
       <ul class="rules" id="rules">
-        <li data-rule="len"><?= e($am ? 'ቢያንስ ፰ ፊደላት' : 'At least 8 characters') ?></li>
-        <li data-rule="mix"><?= e($am ? 'ፊደልና ቁጥር ይዟል' : 'Contains a letter and a number') ?></li>
-        <li data-rule="match"><?= e($am ? 'ሁለቱ የይለፍ ቃላት ይመሳሰላሉ' : 'Both passwords match') ?></li>
+        <li data-r="len" data-t="r_len">ቢያንስ 8 ቁምፊዎች</li>
+        <li data-r="mix" data-t="r_mix">ፊደላትና ቁጥሮች ይካተቱ</li>
+        <li data-r="same" data-t="r_same">ሁለቱም አዲስ የይለፍ ቃሎች ይመሳሰሉ</li>
       </ul>
 
-      <button class="btn" id="go" type="submit" disabled>
-        <span class="spin"></span>
-        <span class="btn-label"><?= e($am ? 'የይለፍ ቃል አስቀምጥ እና ቀጥል' : 'Save password and continue') ?></span>
-      </button>
+      <button class="btn" id="go" type="submit" disabled data-t="save">አስቀምጥና ቀጥል</button>
     </form>
-  </div>
 
-  <p class="foot">
-    <?= e($am ? 'ይህ እርስዎ አይደሉም?' : 'Not you?') ?>
-    <a href="logout.php"><?= e($am ? 'ውጣ' : 'Sign out') ?></a>
-  </p>
-</main>
+    <div class="out"><a href="logout.php" data-t="signout">ውጣ</a></div>
+  </main>
+</div>
 
 <script>
-(function () {
-  'use strict';
-  var AM   = <?= $am ? 'true' : 'false' ?>;
-  var csrf = <?= json_encode($csrf) ?>;
-
-  var np = document.getElementById('np'),
-      cp = document.getElementById('cp'),
-      go = document.getElementById('go'),
-      meter = document.getElementById('meter'),
-      smsg  = document.getElementById('smsg'),
-      rules = document.getElementById('rules'),
-      errBox = document.getElementById('errBox'), errTxt = document.getElementById('errTxt'),
-      okBox  = document.getElementById('okBox'),  okTxt  = document.getElementById('okTxt');
-
-  var T = {
-    weak   : AM ? 'ደካማ'        : 'Weak',
-    fair   : AM ? 'መጠነኛ'       : 'Fair',
-    good   : AM ? 'ጥሩ'         : 'Good',
-    strong : AM ? 'በጣም ጠንካራ'  : 'Strong',
-    saving : AM ? 'በማስቀመጥ ላይ…' : 'Saving…',
-    saved  : AM ? 'ተቀምጧል። በማስገባት ላይ…' : 'Saved. Taking you in…',
-    net    : AM ? 'አገልጋዩ ጋር መገናኘት አልተቻለም።' : 'Could not reach the server.',
-    label  : AM ? 'የይለፍ ቃል አስቀምጥ እና ቀጥል' : 'Save password and continue'
+(() => {
+  const CSRF = <?= json_encode(csrf_token()) ?>;
+  const NEXT = <?= json_encode($next) ?>;
+  const SCHOOL = { am: <?= json_encode($schoolAm, JSON_UNESCAPED_UNICODE) ?>, en: <?= json_encode($schoolEn, JSON_UNESCAPED_UNICODE) ?> };
+  const T = {
+    am:{ title:'አዲስ የይለፍ ቃል ይምረጡ',
+         sub:'ለመቀጠል እባክዎ የራስዎን የይለፍ ቃል ያዘጋጁ። ይህ የሚጠየቀው አንድ ጊዜ ብቻ ነው።',
+         newpw:'አዲስ የይለፍ ቃል',
+         confirm:'አዲሱን የይለፍ ቃል ያረጋግጡ',
+         r_len:'ቢያንስ 8 ቁምፊዎች', r_mix:'ፊደላትና ቁጥሮች ይካተቱ',
+         r_same:'ሁለቱም አዲስ የይለፍ ቃሎች ይመሳሰሉ',
+         save:'አስቀምጥና ቀጥል', saving:'በማስቀመጥ ላይ…', signout:'ውጣ',
+         net:'ከሰርቨሩ ጋር መገናኘት አልተቻለም።' },
+    en:{ title:'Choose a new password',
+         sub:'Set your own password before continuing. You will only be asked once.',
+         newpw:'New password',
+         confirm:'Confirm new password',
+         r_len:'At least 8 characters', r_mix:'Contains letters and numbers',
+         r_same:'Both entries match',
+         save:'Save & continue', saving:'Saving…', signout:'Sign out',
+         net:'Could not reach the server.' }
   };
+  let lang = localStorage.getItem('sr_lang_v2') || 'am';
+  if (!T[lang]) lang = 'am';
+  const $ = s => document.querySelector(s);
 
-  
-  [['np','np-peek'],['cp','cp-peek']].forEach(function (p) {
-    var i = document.getElementById(p[0]), b = document.getElementById(p[1]);
-    b.addEventListener('click', function () {
-      i.type = i.type === 'password' ? 'text' : 'password';
-      i.focus();
+  function apply() {
+    document.documentElement.lang = lang;
+    document.cookie = 'sr_lang=' + lang + ';path=/;max-age=31536000;samesite=Lax';
+    document.querySelectorAll('[data-t]').forEach(el => {
+      const k = el.getAttribute('data-t'); if (T[lang][k]) el.textContent = T[lang][k];
     });
-  });
-
-  function score(v) {
-    var s = 0;
-    if (v.length >= 8)  s++;
-    if (v.length >= 12) s++;
-    if (/[a-z]/.test(v) && /[A-Z]/.test(v)) s++;
-    if (/\d/.test(v) && /[^A-Za-z0-9]/.test(v)) s++;
-    else if (/\d/.test(v) || /[^A-Za-z0-9]/.test(v)) s += 0.5;
-    return Math.max(0, Math.min(4, Math.round(s)));
+    document.querySelectorAll('[data-lang]').forEach(b => b.classList.toggle('on', b.dataset.lang === lang));
+    $('#schoolName').textContent = SCHOOL[lang];
   }
+  document.querySelectorAll('[data-lang]').forEach(b => b.addEventListener('click', () => {
+    lang = b.dataset.lang; localStorage.setItem('sr_lang_v2', lang); apply(); check();
+  }));
 
   function check() {
-    var a = np.value, b = cp.value;
-    var ok = {
-      len   : a.length >= 8,
-      mix   : /[A-Za-z\u1200-\u137F]/.test(a) && /\d/.test(a),
-      match : a.length > 0 && a === b
+    const a = $('#np').value, b = $('#cp').value;
+    const ok = {
+      len:  a.length >= 8,
+      mix:  /[A-Za-z\u1200-\u137F]/.test(a) && /\d/.test(a),
+      same: a.length > 0 && a === b
     };
-    Array.prototype.forEach.call(rules.children, function (li) {
-      li.classList.toggle('ok', !!ok[li.dataset.rule]);
-    });
-
-    var s = a ? score(a) : 0;
-    meter.className = 'meter' + (a ? ' s' + s : '');
-    smsg.textContent = a ? [T.weak, T.weak, T.fair, T.good, T.strong][s] : '';
-
-    go.disabled = !(ok.len && ok.match);
-    return ok;
+    document.querySelectorAll('[data-r]').forEach(li => li.classList.toggle('ok', ok[li.dataset.r]));
+    const score = Object.values(ok).filter(Boolean).length;
+    const bar = $('#bar');
+    bar.style.width = Math.round((score / 3) * 100) + '%';
+    bar.style.background = score < 2 ? '#DC2626' : score < 3 ? '#D97706' : '#16A34A';
+    $('#go').disabled = !(ok.len && ok.same);
+    return ok.len && ok.same;
   }
+  ['np','cp'].forEach(id => $('#' + id).addEventListener('input', check));
 
-  np.addEventListener('input', function () { hide(); check(); });
-  cp.addEventListener('input', function () { hide(); check(); });
+  function showErr(m) { const e = $('#err'); e.textContent = m; e.classList.toggle('show', !!m); }
 
-  function hide() { errBox.classList.remove('show'); }
-  function fail(m) { errTxt.textContent = m; errBox.classList.add('show'); }
-  function busy(on) {
-    go.disabled = on;
-    go.classList.toggle('loading', on);
-    go.querySelector('.btn-label').textContent = on ? T.saving : T.label;
-  }
-
-  document.getElementById('pwForm').addEventListener('submit', function (ev) {
-    ev.preventDefault();
-    hide();
-    var ok = check();
-    if (!ok.len || !ok.match) return;
-
-    busy(true);
-    fetch('../api/auth.php', {
-      method: 'POST',
-      credentials: 'same-origin',
-      headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf, 'X-Requested-With': 'fetch' },
-      body: JSON.stringify({
-        action: 'change_password',
-        new_password: np.value,
-        confirm_password: cp.value
-      })
-    })
-    .then(function (r) { return r.json(); })
-    .then(function (j) {
-      if (j && j.ok) {
-        okTxt.textContent = T.saved;
-        okBox.classList.add('show');
-        setTimeout(function () { location.href = '../index.php'; }, 550);
-        return;
-      }
-      busy(false);
-      check();
-      fail(((j || {}).error || {}).message || T.net);
-    })
-    .catch(function () { busy(false); check(); fail(T.net); });
+  $('#pwForm').addEventListener('submit', async e => {
+    e.preventDefault(); showErr('');
+    if (!check()) return;
+    const btn = $('#go'); btn.disabled = true; btn.textContent = T[lang].saving;
+    try {
+      const r = await fetch('../api/auth.php', {
+        method:'POST', credentials:'same-origin',
+        headers:{'Content-Type':'application/json','Accept':'application/json','X-CSRF-Token':CSRF,'X-Requested-With':'fetch'},
+        body: JSON.stringify({ action:'change_password', new_password: $('#np').value, confirm_password: $('#cp').value })
+      });
+      const j = await r.json().catch(() => null);
+      if (!r.ok || !j || !j.ok) { showErr((j && j.error && j.error.message) || 'Could not save.'); }
+      else { location.href = '../' + (NEXT || 'index.php'); return; }
+    } catch (_) { showErr(T[lang].net); }
+    btn.disabled = false; btn.textContent = T[lang].save;
   });
 
-  np.focus();
+  apply(); check();
 })();
-
-</script></body>
+</script>
+</body>
 </html>

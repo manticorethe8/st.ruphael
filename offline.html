@@ -1,109 +1,98 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="am">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>ከመስመር ውጭ · Offline</title>
-<meta name="theme-color" content="#0d2f57">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#004C9D">
+<title>ቅዱስ ሩፋኤል · Offline</title>
 <link rel="icon" type="image/png" href="assets/logo.png">
-<link rel="stylesheet" href="css/fonts.css">
+<link rel="stylesheet" href="css/fonts.min.css">
 <style>
-  :root{
-    --navy:#0d2f57; --ink:#14263a; --muted:#5c6f84; --bg:#f1f5fa;
-    --line:#e1e9f2; --gold:#c9a227; --amber:#b7791f; --amber-bg:#fdf6e6;
-    --font:'Inter','Noto Sans Ethiopic',system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
-  }
   *{box-sizing:border-box}
-  html,body{height:100%}
+  html,body{height:100%;margin:0}
   body{
-    margin:0; font-family:var(--font); background:var(--bg); color:var(--ink);
-    display:flex; align-items:center; justify-content:center; padding:28px;
+    display:grid;place-items:center;padding:24px;
+    background:
+      radial-gradient(640px 420px at 88% 8%, rgba(254,210,85,.18), transparent 65%),
+      radial-gradient(680px 460px at 10% 18%, rgba(30,100,192,.10), transparent 65%),
+      #F8F9FF;
+    color:#0D2F57;
+    font:400 14.5px/1.6 'Plus Jakarta Sans','Inter','Noto Sans Ethiopic',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
     -webkit-font-smoothing:antialiased;
   }
   .card{
-    width:100%; max-width:520px; background:#fff; border:1px solid var(--line);
-    border-radius:18px; padding:38px 32px 30px; text-align:center;
-    box-shadow:0 18px 44px rgba(13,47,87,.09);
+    max-width:440px;width:100%;background:#FFFFFF;border:1px solid rgba(226,232,240,.7);
+    border-radius:24px;padding:30px 26px;text-align:center;
+    box-shadow:0 12px 36px -8px rgba(13,47,87,.09),0 2px 6px rgba(13,47,87,.03);
   }
-  .logo{width:72px;height:72px;object-fit:contain;margin-bottom:18px}
-  h1{font-size:1.35rem;margin:0 0 6px;letter-spacing:-.01em}
-  h2{font-size:1rem;font-weight:600;color:var(--muted);margin:0 0 20px}
-  p{color:var(--muted);font-size:.92rem;line-height:1.65;margin:0 0 8px}
-  .rule{height:1px;background:var(--line);margin:22px 0}
+  .seal-wrap{position:relative;width:72px;height:72px;margin:0 auto 16px;display:grid;place-items:center}
+  .seal-glow{
+    position:absolute;inset:-6px;border-radius:50%;
+    background:radial-gradient(circle, rgba(254,210,85,.50) 0%, transparent 72%);
+    filter:blur(6px);
+  }
+  .ico{
+    position:relative;width:68px;height:68px;border-radius:50%;background:#FFFFFF;padding:4px;
+    box-shadow:0 6px 18px rgba(13,47,87,.12),0 0 0 1px rgba(236,194,70,.4);
+    display:grid;place-items:center;
+  }
+  .ico img{width:100%;height:100%;border-radius:50%;object-fit:cover;display:block}
+  .badge{
+    display:inline-flex;align-items:center;gap:6px;margin-bottom:10px;
+    padding:4px 12px;border-radius:9999px;background:#FBF6E9;color:#755B00;
+    font-size:11.5px;font-weight:700;
+  }
+  h1{margin:0 0 6px;font-size:19px;font-weight:700;letter-spacing:-.015em;color:#0D2F57}
+  p{margin:0 0 14px;color:#64748B;font-size:13.5px}
+  .am{font-weight:700;color:#0D2F57;font-size:17px;margin-bottom:4px}
   .note{
-    background:var(--amber-bg); border:1px solid #f0e0b4; color:#7a5b10;
-    border-radius:12px; padding:13px 15px; font-size:.86rem; text-align:start;
-    line-height:1.6; margin-bottom:20px;
+    font-size:12.5px;color:#0D2F57;background:#EFF4FF;border:1px solid #D7E2FF;
+    border-radius:14px;padding:12px 14px;margin:14px 0 20px;line-height:1.55;
   }
-  .note strong{color:#5f460a}
+  .btn{
+    display:inline-flex;align-items:center;justify-content:center;gap:8px;height:46px;padding:0 24px;
+    border-radius:9999px;border:0;
+    background:linear-gradient(135deg,#004C9D 0%,#1E64C0 100%);
+    color:#fff;font-family:inherit;font-size:14px;font-weight:600;cursor:pointer;text-decoration:none;
+    box-shadow:0 8px 20px -4px rgba(0,76,157,.34);
+  }
+  .btn:hover{filter:brightness(1.05)}
   .row{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
-  button,a.btn{
-    font-family:inherit; font-size:.9rem; font-weight:600; cursor:pointer;
-    padding:11px 22px; border-radius:11px; border:1px solid var(--line);
-    background:#fff; color:var(--ink); text-decoration:none; transition:.15s;
-  }
-  button.primary{background:var(--navy);border-color:var(--navy);color:#fff}
-  button:hover,a.btn:hover{transform:translateY(-1px);box-shadow:0 6px 16px rgba(13,47,87,.12)}
-  .state{
-    display:inline-flex;align-items:center;gap:8px;font-size:.83rem;font-weight:600;
-    padding:6px 13px;border-radius:999px;background:#fdecea;color:#8c2f22;margin-bottom:16px;
-  }
-  .state.on{background:#e7f6ed;color:#0e4c30}
-  .dot{width:8px;height:8px;border-radius:50%;background:currentColor}
-  .foot{font-size:.78rem;color:var(--muted);margin-top:20px}
-  @media (max-width:420px){ .card{padding:30px 20px 24px} }
+  .btn.alt{background:#E8EFF8;color:#0D2F57;box-shadow:none}
+  .btn.alt:hover{background:#DCE9FF;filter:none}
 </style>
 </head>
 <body>
-  <main class="card">
-    <img class="logo" src="assets/logo.png" alt="">
-    <div class="state" id="state"><span class="dot"></span><span id="stateTxt">ከመስመር ውጭ · Offline</span></div>
-    <h1>ከመስመር ውጭ ነዎት</h1>
-    <h2>You are offline</h2>
-
-    <p>ወደ አገልጋዩ መገናኘት አልተቻለም። ኢንተርኔትዎ ሲመለስ ገጹ በራሱ ይከፈታል።</p>
-    <p>The server could not be reached. This page reloads itself as soon as the connection returns.</p>
-
-    <div class="rule"></div>
-
-    <div class="note">
-      <strong>የተመዘገበ መገኘት አልጠፋም።</strong> ከመስመር ውጭ ሆነው የሠሩት የመገኘት ምዝገባ በመሣሪያዎ ላይ ተቀምጦ፣ ግንኙነት ሲመለስ በራሱ ወደ ዳታቤዙ ይላካል።
-      <br><br>
-      <strong>Nothing you marked is lost.</strong> Attendance taken offline is held in a local queue on this device and
-      is sent to the database automatically once you are back online.
+<main class="card">
+  <div class="seal-wrap">
+    <div class="seal-glow" aria-hidden="true"></div>
+    <div class="ico">
+      <img src="assets/logo.png" alt="ቅዱስ ሩፋኤል" onerror="this.style.display='none'">
     </div>
-
-    <div class="row">
-      <button class="primary" type="button" onclick="location.reload()">እንደገና ሞክር · Retry</button>
-      <a class="btn" href="index.php">ወደ መነሻ · Home</a>
-    </div>
-
-    <p class="foot">ቅዱስ ሩፋኤል ሰንበት ትምህርት ቤት · St. Rufael Church School</p>
-  </main>
-
+  </div>
+  <div class="badge">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+      <line x1="2" y1="2" x2="22" y2="22"/>
+      <path d="M8.5 16.5a5 5 0 0 1 7 0"/><path d="M5 12.6a10 10 0 0 1 5.2-2.6"/>
+      <line x1="12" y1="20" x2="12.01" y2="20"/>
+    </svg>
+    <span>ከመስመር ውጭ · Offline</span>
+  </div>
+  <div class="am">ኢንተርኔት የለም</div>
+  <p>ይህ ገጽ ከዚህ በፊት አልተከፈተም፣ ስለዚህ ያለ ኢንተርኔት ሊታይ አይችልም።</p>
+  <h1>You’re offline</h1>
+  <p>This screen needs a connection because it hasn’t been cached yet.</p>
+  <div class="note">
+    ቀደም ሲል የተከፈተው ዋናው መተግበሪያ ግን ያለ ኢንተርኔት ይሰራል፤ የሚመዘገቡት ክትትሎችም ኢንተርኔት ሲመለስ በራሳቸው ይላካሉ።<br>
+    <span style="color:#64748B">Attendance taken while offline is saved locally and syncs to the server automatically when you reconnect.</span>
+  </div>
+  <div class="row">
+    <button class="btn" type="button" onclick="location.reload()">እንደገና ሞክር · Try again</button>
+    <a class="btn alt" href="./">ወደ መነሻ · Home</a>
+  </div>
+</main>
 <script>
-(function () {
-  var st = document.getElementById('state'), tx = document.getElementById('stateTxt');
-  function paint() {
-    if (navigator.onLine) {
-      st.classList.add('on');
-      tx.textContent = 'ግንኙነት ተመልሷል · Back online';
-      setTimeout(function () { location.replace('index.php'); }, 900);
-    } else {
-      st.classList.remove('on');
-      tx.textContent = 'ከመስመር ውጭ · Offline';
-    }
-  }
-  window.addEventListener('online', paint);
-  window.addEventListener('offline', paint);
-  paint();
-  /* quiet poll, in case the online event never fires */
-  setInterval(function () {
-    fetch('assets/logo.png', { method: 'HEAD', cache: 'no-store' })
-      .then(function () { location.replace('index.php'); })
-      .catch(function () {});
-  }, 8000);
-})();
+  window.addEventListener('online', () => location.reload());
 </script>
 </body>
 </html>

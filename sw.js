@@ -26,7 +26,7 @@
    drop the old shell and pick up new HTML/CSS/JS. Forgetting to bump it is
    the classic "my changes aren't showing up" bug. Keep it in step with
    APP_VERSION in config/config.php. */
-const VERSION     = 'sr-v2.5.0';
+const VERSION     = 'sr-v2.6.8';
 const SHELL_CACHE = VERSION + '-shell';
 const RUNTIME     = VERSION + '-runtime';
 
@@ -37,12 +37,12 @@ const SHELL = [
   'index.php',
   'offline.html',
   'manifest.json',
-  'css/styles.min.css',
+  'css/styles-v2.6.8.min.css',
   'css/fonts.min.css',
   'vendor/bootstrap.min.css',
   'js/features.min.js',
   'js/api.min.js',
-  'js/app.min.js',
+  'js/app-v2.6.8.min.js',
   'js/admin.min.js',
   'assets/logo.png',
   'assets/icons/icon-192.png',
@@ -53,6 +53,10 @@ const SHELL = [
 /* Fonts are big; fetch them lazily so install never fails on a
    slow first load. */
 const OPTIONAL = [
+  'assets/fonts/PlusJakartaSans-latin-400.woff2',
+  'assets/fonts/PlusJakartaSans-latin-500.woff2',
+  'assets/fonts/PlusJakartaSans-latin-600.woff2',
+  'assets/fonts/PlusJakartaSans-latin-700.woff2',
   'assets/fonts/Inter-latin-400.woff2',
   'assets/fonts/Inter-latin-500.woff2',
   'assets/fonts/Inter-latin-600.woff2',

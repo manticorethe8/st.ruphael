@@ -66,7 +66,7 @@ sr_define('SR_PHOTO_MAX_BYTES', 2 * 1024 * 1024);   // 2 MB
 /* -------- Misc -------- */
 sr_define('APP_NAME_AM', 'ቅዱስ ሩፋኤል የሰንበት ትምህርት ቤት');
 sr_define('APP_NAME_EN', 'St. Rufael Church School');
-sr_define('APP_VERSION', '2.4.0');
+sr_define('APP_VERSION', '2.6.8');
 
 /* Marker file written by install.php once the schema exists */
 sr_define('INSTALL_LOCK', SR_ROOT . '/config/installed.lock');

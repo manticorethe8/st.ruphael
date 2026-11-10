@@ -586,13 +586,21 @@ const ICON = {
 /* ====================================================================== */
 function welcomeSection(){
   const name = DATA.user.full_name || '';
+  const yr = (DATA.year && +DATA.year.year_ec) || ET_TODAY.year;
   return `
-  <section class="hello" id="sec-welcome">
-    <div class="hello-txt">
-      <h1>${t('wTitle')}${name ? ` <span class="hello-name">${esc(name.split(' ')[0])}</span>` : ''}</h1>
-      <span class="date-chip">${ICON.cal}${todayLbl()}</span>
+  <section class="dash-intro" id="sec-welcome">
+    <div class="dash-intro-copy">
+      <div class="dash-kicker"><span class="dash-live-dot"></span>${L('የትምህርት ቤት መገኘት','SCHOOL ATTENDANCE')}</div>
+      <h1>${t('wTitle')}${name ? ` <span>${esc(name.split(' ')[0])}</span>` : ''}</h1>
+      <p>${L('የቅዳሜና እሁድ መገኘትን፣ ክፍሎችን እና ተከታታይ ቀሪዎችን በአንድ ቦታ ይከታተሉ።','A clear view of attendance, class registers, and follow-up in one place.')}</p>
     </div>
-    <img class="hello-logo" src="assets/logo.png" alt="${esc(t('brand'))}">
+    <div class="dash-intro-side">
+      <div class="dash-period"><span class="dash-period-date">${ICON.cal}${todayLbl()}</span><span class="dash-period-year">${yrText(yr)} · ${t('curYear')}</span></div>
+      <div class="dash-intro-actions">
+        <a class="btn btn-soft" href="#/grades">${ICON.grid}<span>${L('የክፍል መዝገብ','Class registers')}</span></a>
+        ${can('students.create') ? `<a class="btn btn-primary" href="#/add">${ICON.plus}<span>${t('addStudent')}</span></a>` : ''}
+      </div>
+    </div>
   </section>`;
 }
 function searchSection(){
@@ -607,13 +615,34 @@ function searchSection(){
   </section>`;
 }
 function classesEntrySection(){
+  if (!CLASSES.length){
+    return `
+    <section class="dash-classes" id="sec-classesentry">
+      <div class="dash-section-heading"><div><h2>${t('clT')}</h2><p>${t('clSub')}</p></div>
+        <a class="dash-link" href="#/grades">${L('ክፍሎችን ይክፈቱ','Browse grades')} →</a></div>
+      <div class="dash-empty-classes">${L('ክፍሎች አልተገኙም።','No grades are available yet.')}</div>
+    </section>`;
+  }
+  const items = CLASSES.slice(0, 6).map((cls, index) => {
+    const saint = LANG === 'am' ? cls.g.saintAm : cls.g.saintEn;
+    const tchs = (cls.teachers || []).map(x => x.full_name).filter(Boolean).join(', ');
+    const sub = [saint, tchs].filter(Boolean).join(' · ');
+    return `
+      <a class="dash-class-tile" href="${classHref(cls)}">
+        <span class="dash-class-index">${String(index + 1).padStart(2,'0')}</span>
+        <span class="dash-class-badge ${cls.g.tone || 'gold'}">${geezOf(cls.g)}</span>
+        <span class="dash-class-copy"><strong>${esc(classLabel(cls))}</strong>${sub ? `<small>${esc(sub)}</small>` : ''}</span>
+        <span class="dash-class-count">${langNum(cls.count)}<small>${t('stuSuffix')}</small></span>
+        <span class="dash-class-arrow" aria-hidden="true">↗</span>
+      </a>`;
+  }).join('');
   return `
-  <section id="sec-classesentry">
-    <a class="go-grades" href="#/grades">
-      <span class="gg-ic" aria-hidden="true">${ICON.grid}</span>
-      <span class="gg-txt"><strong>${t('clT')}</strong><span>${t('clSub')}</span></span>
-      <span class="gg-arrow" aria-hidden="true">→</span>
-    </a>
+  <section class="dash-classes" id="sec-classesentry">
+    <div class="dash-section-heading">
+      <div><span class="dash-eyebrow">${L('በፍጥነት ይድረሱ','QUICK ACCESS')}</span><h2>${t('clT')}</h2><p>${t('clSub')}</p></div>
+      <a class="dash-link" href="#/grades">${L('ሁሉንም ክፍሎች ይመልከቱ','View all grades')} <span aria-hidden="true">→</span></a>
+    </div>
+    <div class="dash-class-grid">${items}</div>
   </section>`;
 }
 const loadingHtml = () => `<div class="load-wrap"><span class="spin" aria-hidden="true"></span><span>${t('loading')}</span></div>`;
@@ -651,24 +680,21 @@ async function renderDashboard(){
   DATA.alertsUnread = al.unread || 0;
   updateBell();
 
-  const card = (icon, cls, val, lbl, sub) => `
-    <div class="col-6 col-md-4 col-xl">
-      <div class="stat-card h-100">
-        <span class="stat-ic ${cls}">${icon}</span>
-        <span class="stat-txt"><span class="stat-val">${val}</span><span class="stat-lbl">${lbl}</span>${sub ? `<span class="stat-sub">${sub}</span>` : ''}</span>
-      </div>
-    </div>`;
   const rate = LANG === 'am' ? toGeez(Math.round(stats.rate)) : stats.rate;
+  const metric = (icon, tone, label, value, detail) => `
+    <article class="dash-kpi ${tone}">
+      <div class="dash-kpi-top"><span class="dash-kpi-icon">${icon}</span><span class="dash-kpi-label">${label}</span></div>
+      <strong class="dash-kpi-value">${value}</strong>
+      <span class="dash-kpi-detail">${detail}</span>
+    </article>`;
   const summary = `
-  <section id="sec-summary">
-    <div class="sec-head"><h2>${t('sumT')}</h2><p>${yrText(stats.et_year)}${stats.scoped ? ' · ' + t('tcClasses') : ''}</p></div>
-    <div class="row g-2 g-md-3 summary-row">
-      ${card(ICON.users, 'blue',  langNum(stats.students), t('stTotal'),   '')}
-      ${card(ICON.check, 'green', langNum(stats.present),  t('stPresent'), '')}
-      ${card(ICON.userx, 'red',   langNum(stats.absent),   t('stAbsent'),  '')}
-      ${card(ICON.clock, 'amber', langNum(stats.excused),  t('stLate'),    '')}
-      ${card(ICON.target,'gold',  rate + '%', t('stRate'), langNum(stats.present) + ' / ' + langNum(stats.marked))}
-      ${card(ICON.bell,  'blue',  langNum(DATA.alertsUnread), t('stUnread'), '')}
+  <section id="sec-summary" class="dash-summary">
+    <div class="dash-section-heading"><div><span class="dash-eyebrow">${L('በአጠቃላይ','AT A GLANCE')}</span><h2>${t('sumT')}</h2></div><span class="dash-summary-year">${yrText(stats.et_year)}${stats.scoped ? ' · ' + t('tcClasses') : ''}</span></div>
+    <div class="dash-kpi-grid">
+      ${metric(ICON.users,'students',t('stTotal'),langNum(stats.students),L('የተመዘገቡ ተማሪዎች','Students enrolled'))}
+      ${metric(ICON.target,'rate',t('stRate'),rate+'%',`${langNum(stats.present)} ${t('stPresent')} · ${langNum(stats.marked)}`)}
+      ${metric(ICON.grid,'classes',t('tcClasses'),langNum(CLASSES.length),t('curYear'))}
+      ${metric(ICON.bell,'alerts',t('stUnread'),langNum(DATA.alertsUnread),L('ለክትትል','Need follow-up'))}
     </div>
   </section>`;
 
@@ -789,17 +815,19 @@ async function renderDashboard(){
   })();
 
   const charts = (donut || trend || dayCmp) ? `
-  <section id="sec-charts">
+  <section id="sec-charts" class="dash-analytics">
+    <div class="dash-section-heading"><div><span class="dash-eyebrow">${L('የመገኘት መረጃ','ATTENDANCE DATA')}</span><h2>${L('የመገኘት አዝማሚያዎች','Attendance patterns')}</h2></div></div>
     <div class="ch-grid">${donut}${dayCmp}${trend}</div>
   </section>` : '';
 
   return `
     ${welcomeSection()}
     ${searchSection()}
-    ${classesEntrySection()}
     ${summary}
-    ${charts}
-    ${FEAT('attendanceAlerts') ? alertsSection(DATA.alerts) : ''}`;
+    <div class="dash-main-grid ${FEAT('attendanceAlerts') ? 'has-alerts' : 'solo'}">
+      <div class="dash-main-primary">${charts}${classesEntrySection()}</div>
+      ${FEAT('attendanceAlerts') ? `<aside class="dash-main-rail">${alertsSection(DATA.alerts)}</aside>` : ''}
+    </div>`;
 }
 
 /* ------------------------------- Alerts --------------------------------- */
@@ -830,17 +858,35 @@ function alertsTableHtml(alerts){
 }
 function alertsSection(alerts){
   const unread = alerts.filter(a => !a.read).length;
+  const items = alerts.slice(0, 4).map(a => {
+    const q = (a.full_name + ' ' + a.grade + ' ' + a.last_date).toLowerCase();
+    return `
+      <article class="dash-alert-row alert-row ${a.read ? 'read' : 'unread'}${a.severity === 'high' ? ' sev-high' : ''}"
+          data-q="${esc(q)}" data-profile="${esc(a.grade_id)}|${esc(a.student_id)}"
+          role="button" tabindex="0" aria-label="${esc(a.full_name)}">
+        <span class="dash-alert-av stu-av">${esc(initials(a.full_name))}</span>
+        <span class="dash-alert-main">
+          <span class="dash-alert-name">${esc(a.full_name)}</span>
+          <span class="dash-alert-grade">${esc(a.grade)}</span>
+          <span class="dash-alert-message">${esc(a.message)}</span>
+          <span class="dash-alert-date">${dLbl(a.last_date)} · ${langNum(a.days)} ${LANG === 'am' ? 'ቀናት' : 'days'}</span>
+        </span>
+        <span class="dash-alert-action">${a.read
+          ? `<span class="badge-check small-ck">✓</span>`
+          : `<button class="mini-btn mark-read" data-alert="${esc(a.key)}" type="button" aria-label="${esc(t('markRead'))}">✓</button>`}</span>
+      </article>`;
+  }).join('');
   return `
-  <section id="sec-alerts">
-    <div class="sec-head"><h2>${t('alT')}</h2></div>
-    <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-2">
-      <h3 class="alerts-title h6 mb-0">${t('alHead')}<span class="count-chip">${langNum(unread)} ${t('unreadChip')}</span></h3>
-      <div class="d-flex align-items-center gap-2">
-        ${alerts.length > 5 ? `<a class="mini-btn al-viewall" href="#/alerts">${t('alViewAll')} (${langNum(alerts.length)}) →</a>` : ''}
-        <button class="btn btn-soft" id="markAllTableBtn" type="button" ${unread ? '' : 'disabled'}>${t('markAllBtn')}</button>
-      </div>
+  <section id="sec-alerts" class="dash-alerts">
+    <div class="dash-panel-head">
+      <div><h2>${t('alT')}</h2><p>${t('alHead')}</p></div>
+      <span class="count-chip">${langNum(unread)} ${t('unreadChip')}</span>
     </div>
-    ${alertsTableHtml(alerts.slice(0, 5))}
+    ${alerts.length ? `<div class="dash-alert-list">${items}</div>` : `<div class="dash-alert-empty">${t('alEmpty')}</div>`}
+    <div class="dash-alert-footer">
+      <button class="btn btn-soft btn-sm" id="markAllTableBtn" type="button" ${unread ? '' : 'disabled'}>${t('markAllBtn')}</button>
+      ${alerts.length > 4 ? `<a class="dash-viewall" href="#/alerts">${t('alViewAll')} · ${langNum(alerts.length)} →</a>` : ''}
+    </div>
   </section>`;
 }
 async function renderAlertsPage(){
@@ -896,16 +942,28 @@ async function renderClassesList(){
     return `<div class="card card-pad text-center nf-card"><h2 class="nf-h">${t('clT')}</h2>
       <p class="text-muted nf-sub">${LANG === 'am' ? 'ምንም ክፍል አልተመደበልዎትም።' : 'No grades are assigned to you.'}</p></div>`;
   }
-  const rows = CLASSES.map(cls => `
+  const totalStudents = CLASSES.reduce((sum, c) => sum + (+c.count || 0), 0);
+  const rows = CLASSES.map(cls => {
+    const saint = LANG === 'am' ? cls.g.saintAm : cls.g.saintEn;
+    const tchs = (cls.teachers || []).map(x => x.full_name).filter(Boolean).join(', ');
+    const meta = [saint, tchs].filter(Boolean).join(' · ');
+    return `
     <a class="cls-row" href="${classHref(cls)}">
-      <span class="geez-badge ${cls.g.tone}">${geezOf(cls.g)}</span>
-      <span class="cr-main"><strong>${classLabel(cls)}</strong></span>
+      <span class="geez-badge ${cls.g.tone || 'gold'}">${geezOf(cls.g)}</span>
+      <span class="cr-main">
+        <strong>${esc(classLabel(cls))}</strong>
+        ${meta ? `<span>${esc(meta)}</span>` : `<span>${esc(classLabelLong(cls))}</span>`}
+      </span>
       <span class="cr-count">${langNum(cls.count)} ${t('stuSuffix')}</span>
       <span class="cr-chev" aria-hidden="true">›</span>
-    </a>`).join('');
+    </a>`;
+  }).join('');
   return `
     <div class="page-top">
-      <div class="sec-head mt-0 mb-0"><h2>${t('clT')} <span class="en">${t('clOrder')}</span></h2><p>${t('clsListSub')}</p></div>
+      <div class="sec-head mt-0 mb-0">
+        <h2>${t('clT')} <span class="en">${t('clOrder')}</span></h2>
+        <p>${t('clsListSub')} · ${langNum(CLASSES.length)} ${L('ክፍሎች', 'grades')} · ${langNum(totalStudents)} ${t('stuSuffix')}</p>
+      </div>
       ${can('students.create') ? `<button class="btn btn-primary" id="addStudentBtn" type="button">${ICON.plus} ${t('addStudent')}</button>` : ''}
     </div>
     <div class="cls-list">${rows}</div>`;
@@ -1016,11 +1074,41 @@ async function loadRegister(gradeId, yearEc, gi){
    card names today and the buttons act on today's column. Hidden on
    the correction page, where every change is a single-cell correction.
    ------------------------------------------------------------------ */
+function regTodayCounts(){
+  const list = REG.students || [];
+  let p = 0, a = 0, e = 0;
+  list.forEach(s => {
+    const st = statusAt(s, TODAY_ISO);
+    if (st === 'present') p++;
+    else if (st === 'absent') a++;
+    else if (st === 'excused') e++;
+  });
+  return { total: list.length, present: p, absent: a, excused: e };
+}
+function regTodayStripHtml(){
+  if (REG.corrMode || REG.single || !(REG.students && REG.students.length)) return '';
+  const c = regTodayCounts();
+  return `
+  <div class="row g-2 mb-3" id="regTodayStrip">
+    <div class="col-6 col-md-3"><div class="stat-card"><span class="stat-ic blue">${ICON.users}</span><span class="stat-txt"><span class="stat-val" id="rtTot">${langNum(c.total)}</span><span class="stat-lbl">${t('stTotal')}</span></span></div></div>
+    <div class="col-6 col-md-3"><div class="stat-card"><span class="stat-ic green">${ICON.check}</span><span class="stat-txt"><span class="stat-val" id="rtPres">${langNum(c.present)}</span><span class="stat-lbl">${t('stPresent')} · ${L('ዛሬ', 'Today')}</span></span></div></div>
+    <div class="col-6 col-md-3"><div class="stat-card"><span class="stat-ic red">${ICON.userx}</span><span class="stat-txt"><span class="stat-val" id="rtAbs">${langNum(c.absent)}</span><span class="stat-lbl">${t('stAbsent')} · ${L('ዛሬ', 'Today')}</span></span></div></div>
+    <div class="col-6 col-md-3"><div class="stat-card"><span class="stat-ic gold">${ICON.clock}</span><span class="stat-txt"><span class="stat-val" id="rtExc">${langNum(c.excused)}</span><span class="stat-lbl">${t('stLate')} · ${L('ዛሬ', 'Today')}</span></span></div></div>
+  </div>`;
+}
+function refreshRegTodayStrip(){
+  const box = $('#regTodayStrip');
+  if (!box) return;
+  const c = regTodayCounts();
+  const s = (id, v) => { const el = $('#' + id); if (el) el.textContent = langNum(v); };
+  s('rtTot', c.total); s('rtPres', c.present); s('rtAbs', c.absent); s('rtExc', c.excused);
+}
+
 function regToolbar(){
   /* Hidden for the single-student record and on the correction page:
      bulk actions belong to the class register, not one student's grid. */
-  if (!REG.canEdit || REG.corrMode || REG.single) return '';
-  return `
+  if (!REG.canEdit || REG.corrMode || REG.single) return regTodayStripHtml();
+  return regTodayStripHtml() + `
   <div class="reg-tools card" role="group" aria-label="${t('regTools')}">
     <span class="rt-lbl">${L('ዛሬ የሚመዘገበው', 'Recording for')}</span>
     <span class="rt-date" id="regDate">${esc(isoLabel(TODAY_ISO, true))}</span>
@@ -1196,6 +1284,7 @@ function paintCell(td, status, reason){
   td.classList.remove('just-saved'); void td.offsetWidth; td.classList.add('just-saved');
   if (reason) td.title = td.title.split(' — ')[0] + ' — ' + statusLabel(status) + ' · ' + reason;
   recountColumn(td);
+  refreshRegTodayStrip();
 }
 function recountColumn(td){
   const tr = td.closest('tr'), tbl = td.closest('table');
@@ -1471,18 +1560,18 @@ window.srConfirm = function (opts) {
 /*  Global search                                                          */
 /* ====================================================================== */
 let searchT = null;
-function applySearch(qRaw){
+function applySearch(qRaw, customBox, customClear){
   const q = qRaw.trim().toLowerCase();
-  const box = $('#searchResults');
-  const scb = $('#searchClear');
+  const box = customBox || $('#searchResults');
+  const scb = customClear || $('#searchClear');
   if (scb) scb.hidden = !q;
   if (!box) return;
   if (!q){
     box.hidden = true; box.innerHTML = '';
-    $$('#sec-alerts .alert-row').forEach(r => r.classList.remove('match-hide'));
+    if (!customBox) $$('#sec-alerts .alert-row').forEach(r => r.classList.remove('match-hide'));
     return;
   }
-  $$('#sec-alerts .alert-row').forEach(r => r.classList.toggle('match-hide', !r.dataset.q.includes(q)));
+  if (!customBox) $$('#sec-alerts .alert-row').forEach(r => r.classList.toggle('match-hide', !r.dataset.q.includes(q)));
 
   const clsHits = CLASSES.filter(c => {
     const g = c.g;
@@ -1492,12 +1581,15 @@ function applySearch(qRaw){
   }).slice(0, 8);
   const group = (title, items) => items ? `<div class="sr-group"><p class="sr-title">${title}</p>${items}</div>` : '';
   const clsL = clsHits.map(c => `<a class="sr-item" href="${classHref(c)}">
-      <span class="sr-ic geez-ic ${c.g.tone}">${geezOf(c.g)}</span>
+      <span class="sr-ic geez-ic ${c.g.tone || 'gold'}">${geezOf(c.g)}</span>
       <span class="sr-main"><strong>${classLabel(c)}</strong><span class="sr-sub">${classLabelLong(c)} · ${langNum(c.count)} ${t('stuSuffix')}</span></span>
       <span class="pill todo">${t('clT')}</span></a>`).join('');
 
-  box.innerHTML = group(t('srClasses'), clsL) + `<div class="sr-group" id="srStuGroup"><p class="sr-title">${t('srStudents')}</p><p class="sr-empty">${t('loading')}</p></div>`;
+  box.innerHTML = group(t('srClasses'), clsL) + `<div class="sr-group sr-stu-group"><p class="sr-title">${t('srStudents')}</p><p class="sr-empty">${t('loading')}</p></div>`;
   box.hidden = false;
+  $$('a.sr-item[href^="#/"]', box).forEach(a => a.addEventListener('click', () => {
+    if (customBox) { box.hidden = true; }
+  }));
 
   clearTimeout(searchT);
   searchT = setTimeout(async () => {
@@ -1507,12 +1599,13 @@ function applySearch(qRaw){
         <a class="sr-item" href="#" data-open-profile="${s.id}|${s.grade_id || ''}">
           <span class="sr-ic">${esc(initials(s.full_name))}</span>
           <span class="sr-main"><strong>${esc(s.full_name)}</strong><span class="sr-sub">${esc(LANG === 'am' ? (s.grade_am || '') : (s.grade_en || ''))} · ${esc(s.student_code)}</span></span>
-          <span class="pill todo">${esc(s.baptism_name || '')}</span></a>`).join('');
-      const grp = $('#srStuGroup');
+          ${s.baptism_name ? `<span class="baptism-pill">${esc(s.baptism_name)}</span>` : ''}</a>`).join('');
+      const grp = box.querySelector('.sr-stu-group');
       if (grp) grp.innerHTML = `<p class="sr-title">${t('srStudents')}</p>` +
         (stuL || `<p class="sr-empty">“${esc(qRaw)}” — ${t('srEmpty')}.</p>`);
       $$('[data-open-profile]', box).forEach(a => a.addEventListener('click', e => {
         e.preventDefault();
+        if (customBox) box.hidden = true;
         const [sid, gid] = a.dataset.openProfile.split('|');
         openProfile(sid, gid, state.openYear);
       }));
@@ -2168,6 +2261,7 @@ function applyStaticText(){
                   : LANG === 'en'  ? (schoolEn || schoolAm)
                   : (schoolAm || schoolEn);
   set('brandName', brandName);
+  set('sideBrandName', brandName);
   set('brandSub', t('brandSub'));
   set('notifTitle', t('notifTitle'));
   set('markAllBellBtn', t('markAllRead'));
@@ -2182,9 +2276,19 @@ function applyStaticText(){
     ? '© ' + dateNum(yr) + ' ዓ.ም · ' + brandName
     : '© ' + yr + ' · ' + brandName;
   const fn = $('#footNote'); if (fn) fn.textContent = footTxt;
-  const sf = $('#sideFoot'); if (sf) sf.textContent = footTxt;
+  const sf = $('#sideFoot'); if (sf) sf.textContent = brandName;
+  const sy = $('#sideYearBadge'); if (sy) sy.textContent = yrText(yr);
+  const scd = $('#sideCalDate'); if (scd) scd.textContent = todayLbl();
+  const scs = $('#sideCalSub'); if (scs) scs.textContent = yrText(yr) + ' · ' + t('curYear');
+  const tsi = $('#topSearchInput');
+  if (tsi){
+    tsi.placeholder = t('searchPh');
+    tsi.setAttribute('aria-label', t('searchAria'));
+  }
+  const unt = $('#userTopName'); if (unt && DATA.user && DATA.user.full_name) unt.textContent = DATA.user.full_name;
+  $$('[data-lang-seg]').forEach(b => b.classList.toggle('on', b.dataset.langSeg === LANG));
   document.title = brandName + (LANG === 'am' ? ' · የመገኘት መድረክ' : ' · Attendance Platform');
-  /* account panel labels */
+  /* account & chrome labels */
   $$('[data-am][data-en]').forEach(el => { el.textContent = LANG === 'am' ? el.dataset.am : el.dataset.en; });
 }
 function updateBell(){
@@ -2260,7 +2364,22 @@ function bindChrome(){
     setLang(o.dataset.lang);
     closeDropdowns();
   }));
-  document.addEventListener('click', e => { if (!e.target.closest('.dd-wrap')) closeDropdowns(); });
+  $$('[data-lang-seg]').forEach(b => b.addEventListener('click', () => {
+    if (b.dataset.langSeg && b.dataset.langSeg !== LANG) setLang(b.dataset.langSeg);
+  }));
+  const tsi = $('#topSearchInput'), tsr = $('#topSearchResults'), tsc = $('#topSearchClear');
+  if (tsi && tsr){
+    tsi.addEventListener('input', e => applySearch(e.target.value, tsr, tsc));
+    tsi.addEventListener('focus', () => { if (tsi.value.trim()) applySearch(tsi.value, tsr, tsc); });
+    tsi.addEventListener('keydown', e => {
+      if (e.key === 'Escape'){ tsi.value = ''; applySearch('', tsr, tsc); tsi.blur(); }
+    });
+    tsc && tsc.addEventListener('click', () => { tsi.value = ''; applySearch('', tsr, tsc); tsi.focus(); });
+  }
+  document.addEventListener('click', e => {
+    if (!e.target.closest('.dd-wrap')) closeDropdowns();
+    if (tsr && !tsr.hidden && !e.target.closest('#topSearchWrap')) tsr.hidden = true;
+  });
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape'){
       if ($('#cellMenu')){ closeCellMenu(); return; }

@@ -1,8 +1,8 @@
 <?php
 /* ============================================================
-   index.php — authenticated SPA shell.
-   Same markup as the original index.html, plus the session
-   context the front-end needs (user, capabilities, CSRF).
+   index.php — authenticated SPA shell (Google Stitch UI redesign).
+   Preserves 100% of session context, capabilities, CSRF, routes,
+   and offline service worker behaviour.
    ============================================================ */
 require_once __DIR__ . '/config/config.php';
 require_once __DIR__ . '/config/database.php';
@@ -70,6 +70,8 @@ $boot = [
     ],
     'version' => APP_VERSION,
 ];
+$capsMap  = sr_effective_capabilities($user);
+$canCreateStudent = !empty($capsMap['students.create']);
 $initials = mb_substr(trim((string)($user['full_name'] ?: $user['username'])), 0, 1);
 $roleAm   = ['master' => 'ዋና አስተዳዳሪ', 'admin' => 'አስተዳዳሪ', 'editor' => 'አርታዒ', 'teacher' => 'መምህር'][$user['role']] ?? $user['role'];
 $roleEn   = ucfirst($user['role']);
@@ -81,14 +83,14 @@ $roleEn   = ucfirst($user['role']);
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title><?= e($brandName) ?> · Attendance Platform</title>
 <meta name="description" content="St. Rufael Church School — Ethiopian Orthodox Tewahedo student attendance management platform.">
-<meta name="theme-color" content="#0d2f57">
+<meta name="theme-color" content="#004C9D">
 <link rel="icon" type="image/png" href="assets/logo.png">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="assets/logo.png">
 
 <link rel="stylesheet" href="vendor/bootstrap.min.css">
 <link rel="stylesheet" href="css/fonts.min.css">
-<link rel="stylesheet" id="themeCss" href="css/styles.min.css">
+<link rel="stylesheet" id="themeCss" href="css/styles.min.css?v=<?= rawurlencode(APP_VERSION) ?>">
 </head>
 <body>
 <a class="skip-link" href="#view" data-i18n-skip>Skip to main content</a>
@@ -96,24 +98,49 @@ $roleEn   = ucfirst($user['role']);
 <header class="top">
   <div class="top-in">
     <a class="brand" href="#/dashboard">
-      <img class="brand-logo" src="assets/logo.png" alt="Seal of St. Rufael Church School">
+      <span class="brand-seal">
+        <img class="brand-logo" src="assets/logo.png" alt="Seal of St. Rufael Church School">
+      </span>
       <span class="brand-text">
-        <span class="brand-name" id="brandName"><?= e($brandName) ?></span>
+        <span class="brand-line">
+          <span class="brand-name" id="brandName"><?= e($brandName) ?></span>
+          <span class="brand-tag" data-am="ሰ/ት/ቤት" data-en="School"><?= $lang === 'am' ? 'ሰ/ት/ቤት' : 'School' ?></span>
+        </span>
         <span class="brand-sub" id="brandSub">የመገኘት አስተዳደር መድረክ</span>
       </span>
     </a>
 
+    <!-- Desktop Stitch Global Search Bar (powered by existing live student & class search) -->
+    <div class="top-search-wrap" id="topSearchWrap">
+      <div class="top-search">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20.5 20.5-4.4-4.4"/></svg>
+        <input id="topSearchInput" type="search" autocomplete="off"
+               placeholder="<?= $lang === 'am' ? 'ተማሪ፣ መታወቂያ፣ ወይም ክፍል ይፈልጉ…' : 'Search student, ID, or class…' ?>"
+               aria-label="<?= $lang === 'am' ? 'ተማሪ ወይም ክፍል ይፈልጉ' : 'Search student or class' ?>">
+        <button class="mini-btn top-search-clear" id="topSearchClear" type="button" hidden>✕</button>
+      </div>
+      <div class="search-results top-search-results" id="topSearchResults" hidden></div>
+    </div>
+
     <div class="top-actions">
-      
       <button class="icon-btn sync-chip" id="syncChip" type="button" hidden aria-live="polite">
         <span class="sync-dot" aria-hidden="true"></span>
         <span id="syncTxt">Offline</span>
       </button>
 
-      
-      <div class="dd-wrap">
+      <!-- Stitch Segmented Language Pill Switcher -->
+      <div class="lang-seg" id="langSeg" role="group" aria-label="Language · ቋንቋ">
+        <button type="button" class="lang-seg-btn <?= $lang === 'am' ? 'on' : '' ?>" data-lang-seg="am">
+          <span class="ls-full">አማርኛ</span><span class="ls-short">አማ</span>
+        </button>
+        <button type="button" class="lang-seg-btn <?= $lang === 'en' ? 'on' : '' ?>" data-lang-seg="en">
+          <span class="ls-full">English</span><span class="ls-short">EN</span>
+        </button>
+      </div>
+
+      <!-- Preserved dropdown hooks for compatibility -->
+      <div class="dd-wrap sr-legacy-lang" hidden>
         <button class="icon-btn lang-btn" id="langBtn" aria-haspopup="true" aria-expanded="false" aria-label="Change language · ቋንቋ ቀይር">
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.6 4 5.6 4 9s-1.5 6.4-4 9c-2.5-2.6-4-5.6-4-9s1.5-6.4 4-9z"/></svg>
           <span id="langCode"><?= $lang === 'am' ? 'አማ' : 'EN' ?></span>
         </button>
         <div class="dropdown lang-panel" id="langPanel" role="menu" hidden>
@@ -123,7 +150,6 @@ $roleEn   = ucfirst($user['role']);
         </div>
       </div>
 
-      
       <div class="dd-wrap">
         <button class="icon-btn bell" id="bellBtn" aria-label="Notifications" aria-haspopup="true" aria-expanded="false">
           <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>
@@ -141,10 +167,13 @@ $roleEn   = ucfirst($user['role']);
         </div>
       </div>
 
-      
       <div class="dd-wrap">
         <button class="icon-btn user-btn" id="userBtn" aria-haspopup="true" aria-expanded="false" aria-label="Account">
           <span class="avatar" id="userInitial" aria-hidden="true"><?= e($initials) ?></span>
+          <span class="ub-meta">
+            <strong id="userTopName"><?= e($user['full_name'] ?: $user['username']) ?></strong>
+            <small class="uh-role-inline" data-am="<?= e($roleAm) ?>" data-en="<?= e($roleEn) ?>"><?= e($lang === 'am' ? $roleAm : $roleEn) ?></small>
+          </span>
         </button>
         <div class="dropdown user-panel" id="userPanel" role="menu" hidden>
           <div class="dp-head user-head">
@@ -166,16 +195,44 @@ $roleEn   = ucfirst($user['role']);
 </header>
 
 <aside class="side" id="sidebar" aria-label="Main navigation">
+  <div class="side-head">
+    <a class="side-brand" href="#/dashboard">
+      <span class="side-seal">
+        <img src="assets/logo.png" alt="Seal of St. Rufael Church School">
+      </span>
+      <span class="side-brand-tx">
+        <strong id="sideBrandName"><?= e($brandName) ?></strong>
+        <span id="sideBrandSub" data-am="ሰንበት ት/ቤት ሥርዓት" data-en="Sunday School System"><?= $lang === 'am' ? 'ሰንበት ት/ቤት ሥርዓት' : 'Sunday School System' ?></span>
+      </span>
+    </a>
+    <div class="side-cal" id="sideCalBox">
+      <span class="side-cal-ic" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M8 3v4M16 3v4M3 11h18"/></svg>
+      </span>
+      <div class="side-cal-tx">
+        <strong id="sideCalDate"></strong>
+        <span id="sideCalSub"></span>
+      </div>
+    </div>
+  </div>
+
   <p class="side-label" data-i18n-side>ምናሌ</p>
   <nav id="sideNav"></nav>
-  <p class="side-foot" id="sideFoot">© ፳፻፲፰ ዓ.ም · <?= e($nameAm) ?></p>
+
+  <div class="side-foot-card">
+    <span class="sf-ic" aria-hidden="true">
+      <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v5M9.5 4.5h5M5 21V11l7-4 7 4v10M9 21v-5h6v5"/></svg>
+    </span>
+    <p class="side-foot" id="sideFoot">© ፳፻፲፱ ዓ.ም · <?= e($nameAm) ?></p>
+    <span class="sf-yr" id="sideYearBadge"></span>
+  </div>
 </aside>
 
 <main class="view" id="view" tabindex="-1"></main>
 
 <footer class="app-foot">
   <span class="foot-rule" aria-hidden="true"></span>
-  <p id="footNote">© ፳፻፲፰ ዓ.ም · <?= e($nameAm) ?></p>
+  <p id="footNote">© ፳፻፲፱ ዓ.ም · <?= e($nameAm) ?></p>
 </footer>
 
 <nav class="tabbar" id="tabBar" aria-label="Main navigation"></nav>
@@ -200,7 +257,7 @@ $roleEn   = ucfirst($user['role']);
 
 </script><script src="js/features.min.js"></script>
 <script src="js/api.min.js"></script>
-<script src="js/app.min.js"></script>
+<script src="js/app.min.js?v=<?= rawurlencode(APP_VERSION) ?>"></script>
 <script src="js/admin.min.js"></script>
 <script>
 if ('serviceWorker' in navigator && window.FEATURES && window.FEATURES.pwa) {

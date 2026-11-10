@@ -416,12 +416,23 @@
         </div>` : ''}
       </section>`;
 
+    const activeCount = rows.filter(r => (r.status || 'active') === 'active').length;
+    const alertCount = rows.filter(r => r.alert).length;
+    const gradesUsed = new Set(rows.map(r => r.grade_id).filter(Boolean)).size;
+    const kpis = `
+      <div class="row g-2 g-md-3 mb-3">
+        <div class="col-6 col-xl-3"><div class="stat-card h-100"><span class="stat-ic blue">${ICON.users}</span><span class="stat-txt"><span class="stat-val">${num(rows.length)}</span><span class="stat-lbl">${esc(t('stTotal'))}</span></span></div></div>
+        <div class="col-6 col-xl-3"><div class="stat-card h-100"><span class="stat-ic green">${ICON.check}</span><span class="stat-txt"><span class="stat-val">${num(activeCount)}</span><span class="stat-lbl">${esc(statusLbl('active'))}</span></span></div></div>
+        <div class="col-6 col-xl-3"><div class="stat-card h-100"><span class="stat-ic gold">${ICON.grid}</span><span class="stat-txt"><span class="stat-val">${num(gradesUsed)}</span><span class="stat-lbl">${esc(t('clT'))}</span></span></div></div>
+        <div class="col-6 col-xl-3"><div class="stat-card h-100"><span class="stat-ic red">${ICON.bell}</span><span class="stat-txt"><span class="stat-val">${num(alertCount)}</span><span class="stat-lbl">${esc(t('stUnread'))}</span></span></div></div>
+      </div>`;
+
     const head = `
       ${canSelect ? '<th style="width:34px"><input class="form-check-input" type="checkbox" id="stuAll" aria-label="all"></th>' : ''}
       <th>${esc(t('pmId'))}</th>
       <th>${esc(t('thStudent'))}</th>
       <th>${esc(t('thClass'))}</th>
-      <th>${esc(t('asGender'))}</th>
+      <th>${esc(L('አሳዳጊ · ስልክ', 'Guardian · Phone'))}</th>
       <th>${esc(t('thStatus'))}</th>
       <th class="text-end">${esc(t('thAction'))}</th>`;
 
@@ -431,14 +442,24 @@
                           am() ? st.grade_am : st.grade_en, st.grade_am, st.grade_en])
                           .filter(Boolean).join(' ').toLowerCase())}">
         ${canSelect ? `<td><input class="form-check-input stu-ck" type="checkbox" data-id="${st.id}" ${s.sel[st.id] ? 'checked' : ''} aria-label="${esc(st.full_name)}"></td>` : ''}
-        <td><span class="pm-b-sub">${esc(st.student_code)}</span></td>
+        <td><span class="pm-code">${esc(st.student_code)}</span></td>
         <td>
-          <a href="#" class="stu-open" data-id="${st.id}" data-gid="${st.grade_id || ''}"><strong>${esc(st.full_name)}</strong></a>
-          ${st.baptism_name ? `<div class="pm-b-sub">${esc(st.baptism_name)}</div>` : ''}
-          ${st.alert ? `<span class="pill absent mt-1">${num(st.absence_streak)} ${L('ተከታታይ ቀናት', 'days in a row')}</span>` : ''}
+          <div class="stu-cell">
+            <span class="stu-av">${st.photo_url ? `<img src="${esc(st.photo_url)}" alt="">` : esc(initials(st.full_name))}</span>
+            <span class="d-inline-block">
+              <a href="#" class="stu-open nm d-block" data-id="${st.id}" data-gid="${st.grade_id || ''}">${esc(st.full_name)}</a>
+              <span class="d-flex flex-wrap align-items-center gap-1 mt-1">
+                ${st.baptism_name ? `<span class="baptism-pill">${esc(st.baptism_name)}</span>` : ''}
+                ${st.alert ? `<span class="pill absent">${num(st.absence_streak)} ${L('ተከታታይ ቀናት', 'days in a row')}</span>` : ''}
+              </span>
+            </span>
+          </div>
         </td>
-        <td>${esc(am() ? (st.grade_am || '') : (st.grade_en || ''))}${st.roll_no ? `<div class="pm-b-sub">${esc(t('pmRoll'))} ${num(st.roll_no)}</div>` : ''}</td>
-        <td>${esc(genderLbl(st.gender))}</td>
+        <td><span class="pill b">${esc(am() ? (st.grade_am || '—') : (st.grade_en || '—'))}</span>${st.roll_no ? `<div class="pm-b-sub mt-1">${esc(t('pmRoll'))} ${num(st.roll_no)}</div>` : `${st.gender ? `<div class="pm-b-sub mt-1">${esc(genderLbl(st.gender))}</div>` : ''}`}</td>
+        <td>
+          ${st.guardian_name ? `<div class="fw-semibold" style="font-size:13px">${esc(st.guardian_name)}</div>` : ''}
+          ${st.phone ? `<a class="pm-b-sub d-inline-block" href="tel:${esc(st.phone)}">${esc(st.phone)}</a>` : (!st.guardian_name ? '<span class="pm-b-sub">—</span>' : '')}
+        </td>
         <td>${statusPill(st.status)}</td>
         <td class="text-end">
           <div class="d-inline-flex gap-1 flex-wrap justify-content-end">
@@ -455,6 +476,7 @@
 
     return pageTop(t('stuT'), t('stuSub'),
         can('students.create') ? `<button class="btn btn-primary" id="addStudentBtn" type="button">${ICON.plus} ${t('stuNew')}</button>` : '')
+      + kpis
       + filters
       + tblCard(head, body + noneRow, '', 'stuTbl')
       + `<p class="set-sub mt-3 mb-0" id="stuCount">${esc(stuCountText())}</p>`;

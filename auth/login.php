@@ -1,434 +1,417 @@
 <?php
 /* ============================================================
-   auth/login.php — two-sided sign-in (branding left / form right)
-   ------------------------------------------------------------
-   This page only DRAWS the form. It never checks a password:
-   the credentials are posted to api/auth.php (action=login),
-   which owns hashing, the failed-attempt throttle in the
-   login_attempts table, session fixation defence and the audit
-   entry. Keeping the check in one place means the API and this
-   page can never disagree about who is allowed in.
+   auth/login.php — sign-in page (Google Stitch UI redesign).
 
-   Deliberate behaviours:
-     * Errors are intentionally vague ("bad credentials") so the
-       page cannot be used to discover which usernames exist.
-     * The CSS is inlined rather than pulled from css/styles.css
-       so the sign-in screen still renders correctly before the
-       service worker has cached anything.
-     * A stale CSRF token is refreshed silently and the user is
-       invited to retry, instead of being shown a confusing
-       security error after leaving the tab open overnight.
-     * An account still on a temporary password is redirected by
-       the SERVER to new-password.php; that decision is not made
-       here, so it cannot be skipped by editing the page.
+   Standalone page: works with JavaScript on (fetches api/auth.php
+   so errors stay inline) and posts nowhere by itself — the API is
+   the single authentication path.
    ============================================================ */
 require_once __DIR__ . '/../config/config.php';
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../config/auth.php';
 require_once __DIR__ . '/../lib/helpers.php';
 
-if (!sr_is_installed()) { header('Location: ../install.php'); exit; }
-if (is_logged_in())     { header('Location: ../index.php');   exit; }
-
-/* Language comes from the cookie the switcher sets, so the sign-in screen
-   is already in the reader's language before any account exists. */
-$lang   = (($_COOKIE['sr_lang'] ?? 'am') === 'en') ? 'en' : 'am';
-$token  = csrf_token();
-
-/* Branding is read from settings, but the school may not be installed or the
-   database may be unreachable — fall back to the built-in names rather than
-   failing to render a page whose whole purpose is to let someone in. */
-$school = 'am';
-$quoteAm = ''; $quoteRef = '';
-try {
-    $nameAm = setting('school_name_am', APP_NAME_AM);
-    $nameEn = setting('school_name_en', APP_NAME_EN);
-    /* Settings -> Identity name. With "always Amharic" on (the default)
-       BOTH faces of this page show the Amharic name, so the in-page
-       language toggle cannot undo the administrator's choice. Off, the
-       name follows the page language. */
-    if (sr_brand_always_amharic()) $nameEn = $nameAm !== '' ? $nameAm : $nameEn;
-    /* The quotation is Amharic only — it does not switch with the page
-       language. Empty text hides the block. The default is the sample so
-       the panel is never blank on a database that has not been migrated. */
-    $quoteAm  = trim((string)setting('login_quote_am',
-        'እግዚአብሔር ዓለሙን እንዲሁ ወደደ፤ አንድዬ ልጁን ሰጠ፤ በእርሱ የሚያምን ሁሉ እንዳይጠፋ ይልቁንም የዘላለም ሕይወት እንዲኖረው።'));
-    $quoteRef = trim((string)setting('login_quote_ref', 'ዮሐንስ 3፡16'));
-} catch (Throwable $e) {
-    $nameAm = APP_NAME_AM; $nameEn = APP_NAME_EN;
+if (!sr_is_installed()) {
+    header('Location: ../install.php');
+    exit;
 }
-$today = et_label(date('Y-m-d'), $lang);
+if (is_logged_in()) {
+    header('Location: ../index.php');
+    exit;
+}
+$schoolAm = setting('school_name_am', APP_NAME_AM);
+$schoolEn = setting('school_name_en', APP_NAME_EN);
+if (sr_brand_always_amharic() && $schoolAm !== '') {
+    $schoolEn = $schoolAm;
+}
+$quoteAm  = trim((string)setting('login_quote_am',
+    'እግዚአብሔር ዓለሙን እንዲሁ ወደደ፤ አንድያ ልጁን ሰጠ፤ በእርሱ የሚያምን ሁሉ እንዳይጠፋ ይልቁንም የዘላለም ሕይወት እንዲኖረው።'));
+$quoteRef = trim((string)setting('login_quote_ref', 'ዮሐንስ 3፡16'));
+$csrf     = csrf_token();
+$langInit = (($_COOKIE['sr_lang'] ?? 'am') === 'en') ? 'en' : 'am';
+$next     = trim((string)($_GET['next'] ?? ''));
+/* only accept local relative paths — never redirect off-site */
+if ($next !== '' && ($next[0] === '/' || strpos($next, '://') !== false || strpos($next, '..') !== false)) {
+    $next = '';
+}
 ?>
 <!doctype html>
-<html lang="<?= $lang ?>" dir="ltr">
+<html lang="am">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#0d2f57">
-<title><?= e($lang === 'am' ? 'ግባ' : 'Sign in') ?> · <?= e($lang === 'am' ? $nameAm : $nameEn) ?></title>
-<link rel="icon" href="../assets/logo.png">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#004C9D">
 <link rel="manifest" href="../manifest.json">
-<link rel="stylesheet" href="../css/fonts.min.css">
+<link rel="icon" type="image/png" href="../assets/logo.png">
+<link rel="apple-touch-icon" href="../assets/logo.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title><?= e($schoolAm) ?> · Sign in</title>
+<link rel="stylesheet" href="../css/fonts.min.css?v=<?= e(APP_VERSION) ?>">
 <style>
-:root{
-  --blue-950:#081f3c; --blue-900:#0d2f57; --blue-800:#123f75; --blue-700:#1753a0;
-  --blue-600:#1e64c0; --blue-500:#2f7fd4; --blue-300:#9cc2ec; --blue-100:#dbe9f8; --blue-50:#eef5fd;
-  --gold:#c9a227; --gold-600:#a8871c; --gold-100:#f7efda;
-  --ink:#14263a; --muted:#5c6f84; --bg:#f1f5fa; --card:#fff; --line:#e1e9f2;
-  --red:#b3372b; --red-bg:#fdeceb; --green:#146c43; --green-bg:#e4f5ec;
-  --shadow-md:0 4px 14px rgba(13,47,87,.10),0 1px 4px rgba(13,47,87,.07);
-  --shadow-lg:0 14px 38px rgba(13,47,87,.16);
-  --font:'Inter','Noto Sans Ethiopic',system-ui,'Segoe UI',Roboto,Arial,sans-serif;
-}
-*,*::before,*::after{box-sizing:border-box}
-body{margin:0;font-family:var(--font);color:var(--ink);background:var(--bg);font-size:15px;line-height:1.55;-webkit-font-smoothing:antialiased}
-:focus-visible{outline:2px solid var(--gold);outline-offset:2px;border-radius:6px}
-img{display:block;max-width:100%}
+  :root{
+    --primary:#0757a6;--primary-dark:#06437e;--navy:#0d2f57;--ink:#172b43;
+    --muted:#68798c;--line:#e2e8ef;--surface:#f5f7fa;--gold:#fed255;
+    --danger:#a62e25;--danger-bg:#fff1ef;
+    --font:'Plus Jakarta Sans','Inter','Noto Sans Ethiopic',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+  }
+  *,*::before,*::after{box-sizing:border-box}
+  html,body{width:100%;min-height:100%;margin:0}
+  body{min-height:100vh;min-height:100dvh;display:flex;align-items:center;justify-content:center;padding:24px;background:#f1f5fa;color:var(--ink);font:400 14px/1.55 var(--font);-webkit-font-smoothing:antialiased}
+  .auth-shell{position:relative;isolation:isolate;display:grid;grid-template-columns:minmax(270px,.82fr) minmax(400px,1.18fr);width:min(980px,100%);min-height:min(640px,calc(100dvh - 48px));overflow:hidden;border:1px solid #e2e8ef;border-radius:20px;background:#fff;box-shadow:0 14px 44px rgba(13,47,87,.09)}
 
-.wrap{min-height:100dvh;display:grid;grid-template-columns:1.05fr .95fr}
+  .welcome-panel{position:relative;isolation:isolate;overflow:hidden;display:flex;flex-direction:column;justify-content:space-between;gap:28px;padding:40px 36px;background:var(--navy);color:#fff}
+  .hero-brand{position:relative;z-index:1;display:flex;flex-direction:column;align-items:flex-start;width:100%;margin:0;text-align:left}
+  .seal-wrap{position:relative;display:inline-flex;margin-bottom:22px}
+  .seal-glow{position:absolute;inset:-7px;border-radius:50%;background:rgba(254,210,85,.18);filter:blur(8px);pointer-events:none}
+  .seal{position:relative;display:grid;place-items:center;width:58px;height:58px;padding:3px;border:1px solid rgba(254,210,85,.65);border-radius:50%;background:#fff}
+  .seal img{display:block;width:100%;height:100%;border-radius:50%;object-fit:cover}
+  .seal .fallback{display:none;width:100%;height:100%;place-items:center;border-radius:50%;background:var(--primary);color:white;font-size:18px;font-weight:700}
+  .seal.noimg img{display:none}.seal.noimg .fallback{display:grid}
+  .hero-brand h1{max-width:360px;margin:0 0 8px;color:#fff;font-size:clamp(22px,2.5vw,30px);font-weight:700;letter-spacing:-.035em;line-height:1.2}
+  .hero-brand p{max-width:340px;margin:0;color:rgba(255,255,255,.72);font-size:12.5px;line-height:1.5}
+  .verse-card{position:relative;z-index:1;display:flex;align-items:flex-start;gap:10px;width:100%;padding:13px 14px;border:1px solid rgba(255,255,255,.13);border-left:2px solid var(--gold);border-radius:4px 10px 10px 4px;background:rgba(255,255,255,.055)}
+  .verse-icon{display:grid;place-items:center;flex:0 0 26px;width:26px;height:26px;border-radius:7px;background:rgba(254,210,85,.13);color:var(--gold)}
+  .verse-body{flex:1;min-width:0}.verse-body p{margin:0;color:rgba(255,255,255,.9);font-size:11px;font-style:italic;line-height:1.55}
+  .verse-body cite{display:block;margin-top:4px;color:var(--gold);font-size:10px;font-style:normal;font-weight:700}
+  .verse-watermark{position:absolute;right:-4px;bottom:-8px;color:rgba(255,255,255,.05);pointer-events:none}
 
-.side{
-  position:relative;color:#fff;padding:48px 52px;display:flex;flex-direction:column;
-  background:linear-gradient(150deg,var(--blue-950) 0%,var(--blue-900) 42%,var(--blue-700) 100%);
-  overflow:hidden;
-}
-.side::before{content:"";position:absolute;inset:0;
-  background:radial-gradient(680px 320px at 88% -8%,rgba(201,162,39,.20),transparent 62%),
-             radial-gradient(520px 320px at -12% 108%,rgba(93,154,222,.24),transparent 60%);}
-.side::after{content:"";position:absolute;top:0;right:0;bottom:0;width:3px;
-  background:linear-gradient(180deg,transparent,var(--gold) 22%,#e6c85a 50%,var(--gold) 78%,transparent)}
-.side > *{position:relative;z-index:1}
-.mark{display:flex;align-items:center;gap:14px}
-.mark img{width:58px;height:58px;border-radius:14px;background:rgba(255,255,255,.94);padding:6px;box-shadow:var(--shadow-md)}
-.mark b{display:block;font-size:1.06rem;letter-spacing:.2px}
-.mark span{display:block;font-size:.82rem;color:var(--blue-300)}
-.side-sp{flex:1;min-height:24px}
+  .login-panel{display:flex;flex-direction:column;min-width:0;padding:24px 34px 18px;background:#fff}
+  .top-meta{display:flex;align-items:center;justify-content:flex-end;gap:10px}
+  .version-pill{padding:4px 8px;border:1px solid var(--line);border-radius:999px;color:var(--muted);font-size:9px;font-weight:700}
+  .lang{display:inline-flex;align-items:center;gap:2px;padding:3px;border:1px solid var(--line);border-radius:999px;background:#f5f7fa}
+  .lang button{min-height:32px;padding:6px 10px;border:0;border-radius:999px;background:transparent;color:var(--muted);font:600 10.5px/1.2 var(--font);cursor:pointer;transition:background .15s,color .15s}
+  .lang button.on{background:#fff;color:var(--primary);box-shadow:0 1px 4px rgba(13,47,87,.12)}
+  .lang button:hover{color:var(--ink)}
 
-.side-quote{position:relative;margin:auto 0;padding:26px 4px 20px}
-.side-quote::before{content:"“";position:absolute;top:-14px;left:-10px;font-size:5.2rem;line-height:1;
-  font-family:Georgia,'Times New Roman',serif;color:var(--gold);opacity:.55;pointer-events:none}
-.side-quote::after{content:"";display:block;width:44px;height:2px;margin:18px 0 0;
-  background:linear-gradient(90deg,var(--gold),transparent)}
-.side-quote p{margin:0;font-size:1.12rem;line-height:1.9;color:#eef4fc;max-width:36ch}
-.side-quote cite{display:block;margin-top:10px;font-style:normal;font-size:.9rem;font-weight:700;
-  color:var(--gold);letter-spacing:.4px}
-.side-foot{font-size:.78rem;color:#9dbbdd;border-top:1px solid rgba(255,255,255,.13);padding-top:16px}
+  .card{align-self:center;width:min(100%,390px);margin:auto;padding:22px 0;border:0;border-radius:0;background:transparent;box-shadow:none}
+  .card h2{margin:0 0 4px;color:var(--ink);font-size:25px;font-weight:700;letter-spacing:-.035em;line-height:1.25}
+  .card .sub{margin:0 0 24px;color:var(--muted);font-size:12.5px}
+  .field{margin-bottom:15px}
+  label{display:block;margin-bottom:6px;color:#34465b;font-size:11.5px;font-weight:700}
+  .inp-wrap{position:relative;display:flex;align-items:center;border:1px solid #dfe6ed;border-radius:10px;background:#f8fafc;transition:border-color .15s,background .15s,box-shadow .15s}
+  .inp-wrap:focus-within{border-color:#4b89c2;background:#fff;box-shadow:0 0 0 3px rgba(7,87,166,.1)}
+  .inp-ico{display:grid;place-items:center;padding:0 2px 0 12px;color:#8291a2;pointer-events:none}
+  input[type=text],input[type=password]{width:100%;height:46px;padding:0 12px 0 9px;border:0;border-radius:10px;outline:0;background:transparent;color:var(--ink);font:500 13px var(--font)}
+  input::placeholder{color:#98a5b2;font-weight:400}
+  .pw .eye{display:grid;place-items:center;flex:0 0 38px;width:38px;height:38px;margin-right:3px;border:0;border-radius:8px;background:transparent;color:#8291a2;cursor:pointer}
+  .pw .eye:hover{background:#edf2f7;color:var(--ink)}
+  .row-between{display:flex;align-items:center;justify-content:flex-end;margin:0 0 16px}
+  .link{padding:4px 0;border:0;background:transparent;color:var(--primary);font:600 11px var(--font);cursor:pointer}
+  .link:hover{color:var(--primary-dark);text-decoration:underline}
+  .btn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;min-height:47px;border:0;border-radius:9px;background:var(--primary);color:#fff;font:700 13px var(--font);cursor:pointer;transition:background .15s,transform .12s}
+  .btn:hover{background:var(--primary-dark)}.btn:active{transform:translateY(1px)}.btn:disabled{opacity:.55;cursor:not-allowed;transform:none}
+  .btn.alt{min-height:44px;margin-top:8px;background:#edf2f7;color:var(--ink)}.btn.alt:hover{background:#e4ebf2}
+  .msg{display:none;align-items:flex-start;gap:8px;margin:0 0 14px;padding:10px 12px;border:1px solid #ffd2cc;border-radius:9px;background:var(--danger-bg);color:var(--danger);font-size:11.5px;line-height:1.5}
+  .msg.show{display:flex}.msg svg{flex:0 0 auto;margin-top:2px}
+  .recov{display:none}.recov.show{display:block}
+  .recov-note{display:flex;align-items:flex-start;gap:9px;margin:0 0 12px;padding:12px;border:1px solid var(--line);border-radius:9px;background:#f7f9fb;color:#485a6e;font-size:12px;line-height:1.55}
+  .recov-note svg{flex:0 0 auto;margin-top:2px;color:var(--primary)}
+  .foot{display:flex;align-items:center;justify-content:center;gap:6px;margin-top:auto;padding:12px 0 0;color:#8290a0;font-size:10px;text-align:center}
+  .foot svg{flex:0 0 auto;color:var(--primary);opacity:.75}
 
-.panel{display:flex;align-items:center;justify-content:center;padding:40px 28px;background:
-  radial-gradient(760px 300px at 110% -40px,rgba(47,127,212,.07),transparent 60%),
-  radial-gradient(520px 260px at -80px 110%,rgba(201,162,39,.06),transparent 58%),var(--bg)}
-.box{width:100%;max-width:410px}
-.box-head{margin-bottom:24px}
-.box-head h2{font-size:1.6rem;margin:0 0 6px;font-weight:800;letter-spacing:-.3px}
-.box-head p{color:var(--muted);margin:0;font-size:.93rem}
-.mob-mark{display:none;align-items:center;gap:11px;margin-bottom:22px}
-.mob-mark img{width:44px;height:44px;border-radius:11px;box-shadow:var(--shadow-md)}
-.mob-mark b{font-size:.98rem}.mob-mark span{display:block;font-size:.76rem;color:var(--muted)}
-
-form{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:26px 24px;box-shadow:var(--shadow-lg)}
-.field{margin-bottom:16px}
-label{display:block;font-size:.83rem;font-weight:650;color:var(--ink);margin-bottom:6px}
-.inp{position:relative;display:flex;align-items:center}
-.inp svg{position:absolute;left:13px;width:17px;height:17px;stroke:var(--muted);pointer-events:none}
-input[type=text],input[type=password]{
-  width:100%;font-family:inherit;font-size:.97rem;color:var(--ink);
-  padding:12px 13px 12px 40px;border:1.5px solid var(--line);border-radius:11px;background:#fbfdff;transition:border-color .15s,box-shadow .15s}
-input:focus{outline:none;border-color:var(--blue-500);box-shadow:0 0 0 3.5px rgba(47,127,212,.16);background:#fff}
-input[aria-invalid=true]{border-color:var(--red);box-shadow:0 0 0 3.5px rgba(179,55,43,.13)}
-.peek{position:absolute;right:6px;background:none;border:0;padding:8px;border-radius:8px;color:var(--muted);display:flex}
-.peek:hover{color:var(--blue-700);background:var(--blue-50)}
-.peek svg{position:static;width:18px;height:18px;stroke:currentColor}
-.row{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:4px 0 18px}
-.hint{font-size:.82rem;color:var(--muted)}
-
-.btn{width:100%;border:0;border-radius:11px;padding:13px 18px;font-size:.99rem;font-weight:700;color:#fff;cursor:pointer;
-  background:linear-gradient(135deg,var(--blue-700),var(--blue-600));box-shadow:0 3px 12px rgba(23,83,160,.30);
-  display:flex;align-items:center;justify-content:center;gap:10px;transition:filter .15s,transform .06s}
-.btn:hover:not(:disabled){filter:brightness(1.07)}
-.btn:active:not(:disabled){transform:translateY(1px)}
-.btn:disabled{opacity:.72;cursor:progress}
-.spin{width:17px;height:17px;border:2.4px solid rgba(255,255,255,.4);border-top-color:#fff;border-radius:50%;animation:sp .7s linear infinite;display:none}
-.btn.loading .spin{display:block}
-.btn.loading .btn-label{opacity:.92}
-@keyframes sp{to{transform:rotate(360deg)}}
-
-.alert{display:none;align-items:flex-start;gap:10px;padding:11px 13px;border-radius:11px;font-size:.88rem;margin-bottom:16px;border:1px solid transparent}
-.alert.show{display:flex}
-.alert.err{background:var(--red-bg);border-color:#f3c6c1;color:#7d241b}
-.alert.ok{background:var(--green-bg);border-color:#bfe3ce;color:#0e4c30}
-.alert svg{width:17px;height:17px;flex:none;margin-top:1px;stroke:currentColor}
-
-.lang{display:flex;gap:4px;background:#e7eef7;border:1px solid var(--line);border-radius:999px;padding:3px;width:max-content;margin:0 auto 20px}
-.lang button{border:0;background:none;padding:6px 15px;border-radius:999px;font-size:.83rem;font-weight:650;color:var(--muted);cursor:pointer}
-.lang button[aria-pressed=true]{background:#fff;color:var(--blue-800);box-shadow:var(--shadow-md)}
-.linkish{background:none;border:0;padding:0;font:inherit;font-size:.82rem;
-  color:var(--blue-600,#2f7fd4);cursor:pointer;text-decoration:underline}
-.linkish:hover{color:var(--blue-800,#1753a0)}
-.recov-h{font-size:1.02rem;font-weight:700;margin-bottom:8px}
-.recov-p{font-size:.85rem;color:var(--muted);line-height:1.6;margin-bottom:16px}
-#recovCancel{display:block;margin:4px auto 0}
-
-@media (max-width:900px){
-  .wrap{grid-template-columns:1fr}
-  .side{display:none}
-  
-  .mob-mark{display:flex;flex-direction:column;align-items:center;text-align:center;gap:10px;margin-bottom:24px}
-  .mob-mark img{width:60px;height:60px;border-radius:16px}
-  .mob-mark b{font-size:1.06rem;line-height:1.3;display:block}
-  .mob-mark span{font-size:.8rem;margin-top:2px}
-  .panel{padding:28px 20px;align-items:flex-start;min-height:100dvh}
-  .box{margin-top:8px}
-  .box-head{text-align:center}
-  .lang{justify-content:center}
-  form{padding:22px 18px;border-radius:16px}
-}
-@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
-
-</style></head>
+  @media(max-width:760px){
+    body{align-items:stretch;padding:0;background:#fff}
+    .auth-shell{display:flex;flex-direction:column;gap:0;width:100%;max-width:560px;min-height:100vh;min-height:100dvh;margin:0 auto;border:0;border-radius:0;overflow:visible;box-shadow:none}
+    .welcome-panel{flex:none;min-height:202px;gap:14px;padding:22px 22px 16px;border-radius:0 0 18px 18px}
+    .hero-brand{display:grid;grid-template-columns:48px minmax(0,1fr);grid-template-rows:auto auto;align-items:center;column-gap:12px}
+    .seal-wrap{grid-column:1;grid-row:1/3;margin:0}.seal{width:44px;height:44px;padding:2px}
+    .hero-brand h1{grid-column:2;grid-row:1;margin:0 0 3px;font-size:20px}
+    .hero-brand p{grid-column:2;grid-row:2;font-size:10.5px}
+    .verse-card{padding:8px 10px;gap:8px}.verse-icon{width:23px;height:23px;flex-basis:23px;border-radius:6px}
+    .verse-body p{font-size:9.5px;line-height:1.45}.verse-body cite{margin-top:2px;font-size:9px}
+    .login-panel{flex:1;min-height:0;padding:15px 22px max(16px,env(safe-area-inset-bottom))}
+    .top-meta{justify-content:space-between}
+    .card{width:min(100%,390px);padding:20px 0}
+    .card h2{font-size:23px}.card .sub{margin-bottom:20px;font-size:12px}
+    .field{margin-bottom:13px}.row-between{margin-bottom:14px}
+    input[type=text],input[type=password]{height:46px}
+    .btn{min-height:47px}.foot{padding-top:10px}
+  }
+  @media(max-width:360px){
+    .welcome-panel{min-height:190px;padding:18px 16px 13px}
+    .hero-brand{grid-template-columns:42px minmax(0,1fr);column-gap:9px}
+    .seal{width:40px;height:40px}.hero-brand h1{font-size:18px}
+    .login-panel{padding-inline:18px}
+    .card{padding-top:15px}.card h2{font-size:21px}
+    .version-pill{font-size:8.5px}.lang button{min-height:30px;padding-inline:8px;font-size:9.5px}
+  }
+  @media(max-width:760px) and (max-height:620px){
+    .welcome-panel{min-height:174px;gap:9px;padding-block:14px 11px}
+    .seal{width:38px;height:38px}.hero-brand h1{font-size:18px}
+    .verse-card{padding:7px 9px}.verse-body p{font-size:9px}
+    .login-panel{padding-top:10px}.card{padding:10px 0}
+    .card h2{font-size:20px}.card .sub{margin-bottom:12px}
+    .field{margin-bottom:8px}label{margin-bottom:4px;font-size:10.5px}
+    input[type=text],input[type=password]{height:40px}.row-between{margin-bottom:8px}.btn{min-height:42px}
+  }
+  @media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;transition:none!important;animation:none!important}}
+</style>
+</head>
 <body>
-<div class="wrap">
 
-  
-  <aside class="side">
-    <div class="mark">
-      <img src="../assets/logo.png" alt="">
-      <div>
-        <b data-am="<?= e($nameAm) ?>" data-en="<?= e($nameEn) ?>"><?= e($lang === 'am' ? $nameAm : $nameEn) ?></b>
-        <span data-am="የተማሪዎች እና የክትትል ሥርዓት" data-en="Student &amp; Attendance System"><?=
-          $lang === 'am' ? 'የተማሪዎች እና የክትትል ሥርዓት' : 'Student &amp; Attendance System' ?></span>
+<main class="auth-shell">
+  <!-- Image-led welcome pane paired with the focused sign-in panel -->
+  <section class="welcome-panel" aria-label="St. Rufael Church School">
+  <!-- Sacred Emblem Seal & School Heading -->
+  <div class="hero-brand">
+    <div class="seal-wrap">
+      <div class="seal-glow" aria-hidden="true"></div>
+      <div class="seal" id="sealMark">
+        <img src="../assets/logo.png" alt="" onerror="this.parentNode.classList.add('noimg')">
+        <span class="fallback" aria-hidden="true">ቅሩ</span>
       </div>
     </div>
+    <h1 id="schoolTitle"><?= e($schoolAm) ?></h1>
+    <p data-t="tagline">የተማሪዎች እና የክትትል ሥርዓት</p>
+  </div>
 
-    <?php if ($quoteAm !== ''): ?>
-    <blockquote class="side-quote" aria-label="<?= e($lang === 'am' ? 'የቅዱስ ጽሑፍ ጥቅስ' : 'Scripture quotation') ?>">
-      <p><?= e($quoteAm) ?></p>
-      <?php if ($quoteRef !== ''): ?><cite>— <?= e($quoteRef) ?></cite><?php endif; ?>
-    </blockquote>
-    <?php else: ?>
-    <div class="side-sp" aria-hidden="true"></div>
-    <?php endif; ?>
-
-    <div class="side-foot">
-      <span id="etDate"><?= e($today) ?></span> ·
-      <span data-am="ሥሪት" data-en="Version"><?= $lang === 'am' ? 'ሥሪት' : 'Version' ?></span> <?= e(APP_VERSION) ?>
+  <?php if ($quoteAm !== ''): ?>
+  <!-- Warm Liturgical Gold Scripture Banner -->
+  <div class="verse-card">
+    <div class="verse-icon" aria-hidden="true">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M2 4h7a3 3 0 0 1 3 3v13a2.5 2.5 0 0 0-2.5-2.5H2z"/>
+        <path d="M22 4h-7a3 3 0 0 0-3 3v13a2.5 2.5 0 0 1 2.5-2.5H22z"/>
+      </svg>
     </div>
-  </aside>
+    <div class="verse-body">
+      <p id="verseText">“<?= e($quoteAm) ?>”</p>
+      <?php if ($quoteRef !== ''): ?>
+      <cite id="verseCite">— <?= e($quoteRef) ?></cite>
+      <?php endif; ?>
+    </div>
+    <svg class="verse-watermark" width="68" height="68" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+      <path d="M12 3v18M6 8h12"/>
+    </svg>
+  </div>
+  <?php endif; ?>
+  </section><!-- /.welcome-panel -->
 
-  
-  <main class="panel">
-    <div class="box">
-      <div class="mob-mark">
-        <img src="../assets/logo.png" alt="">
-        <div>
-          <b data-am="<?= e($nameAm) ?>" data-en="<?= e($nameEn) ?>"><?= e($lang === 'am' ? $nameAm : $nameEn) ?></b>
-          <span data-am="የተማሪዎች እና የክትትል ሥርዓት" data-en="Student &amp; Attendance System"><?=
-            $lang === 'am' ? 'የተማሪዎች እና የክትትል ሥርዓት' : 'Student &amp; Attendance System' ?></span>
-        </div>
-      </div>
-
+  <section class="login-panel" aria-label="Sign in">
+    <!-- Application version and existing language switcher -->
+    <div class="top-meta">
+      <div class="version-pill" aria-label="Application version">v<?= e(APP_VERSION) ?></div>
       <div class="lang" role="group" aria-label="Language">
-        <button type="button" data-lang="am" aria-pressed="<?= $lang === 'am' ? 'true' : 'false' ?>">አማርኛ</button>
-        <button type="button" data-lang="en" aria-pressed="<?= $lang === 'en' ? 'true' : 'false' ?>">English</button>
+        <button type="button" data-lang="am">አማርኛ</button>
+        <button type="button" data-lang="en">English</button>
+      </div>
+    </div>
+
+  <!-- Sign-In Card -->
+  <section class="card">
+    <div id="signView">
+      <h2 data-t="welcome">እንኳን ደህና መጡ</h2>
+      <p class="sub" data-t="sub">ለመቀጠል በመለያዎ ይግቡ።</p>
+
+      <div class="msg err" id="errBox" role="alert">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        <span id="errText"></span>
       </div>
 
-      <div class="box-head">
-        <h2 data-am="እንኳን ደህና መጡ" data-en="Welcome back"><?= $lang === 'am' ? 'እንኳን ደህና መጡ' : 'Welcome back' ?></h2>
-        <p data-am="ለመቀጠል በመለያዎ ይግቡ።" data-en="Sign in to continue."><?=
-          $lang === 'am' ? 'ለመቀጠል በመለያዎ ይግቡ።' : 'Sign in to continue.' ?></p>
-      </div>
-
-      <form id="loginForm" method="post" autocomplete="on" novalidate>
-        <input type="hidden" name="csrf_token" value="<?= e($token) ?>">
-
-        <div class="alert err" id="errBox" role="alert" aria-live="assertive">
-          <svg fill="none" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 8v5M12 16h.01"/></svg>
-          <span id="errText"></span>
-        </div>
-<?php $bye = isset($_GET['bye']); ?>
-        <div class="alert ok<?= $bye ? ' show' : '' ?>" id="okBox" role="status" aria-live="polite">
-          <svg fill="none" stroke-width="2" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg>
-          <span id="okText" <?= $bye ? 'data-am="በሰላም ወጥተዋል።" data-en="You have been signed out."' : '' ?>><?= $bye ? ($lang === 'am' ? 'በሰላም ወጥተዋል።' : 'You have been signed out.') : '' ?></span>
-        </div>
-
+      <form id="loginForm" autocomplete="on" novalidate>
         <div class="field">
-          <label for="username" data-am="የተጠቃሚ ስም" data-en="Username"><?= $lang === 'am' ? 'የተጠቃሚ ስም' : 'Username' ?></label>
-          <div class="inp">
-            <svg fill="none" stroke-width="2" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2M12 11a4 4 0 100-8 4 4 0 000 8z"/></svg>
-            <input id="username" name="username" type="text" required autocapitalize="none" autocomplete="username"
-                   spellcheck="false" autofocus>
+          <label for="u" data-t="username">የተጠቃሚ ስም</label>
+          <div class="inp-wrap">
+            <span class="inp-ico" aria-hidden="true">
+              <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 20a8 8 0 0 1 16 0"/></svg>
+            </span>
+            <input id="u" name="username" type="text" autocomplete="username" autocapitalize="none" spellcheck="false" required autofocus>
           </div>
         </div>
-
         <div class="field">
-          <label for="password" data-am="የይለፍ ቃል" data-en="Password"><?= $lang === 'am' ? 'የይለፍ ቃል' : 'Password' ?></label>
-          <div class="inp">
-            <svg fill="none" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
-            <input id="password" name="password" type="password" required autocomplete="current-password">
-            <button class="peek" type="button" id="peek" aria-label="Show password">
-              <svg fill="none" stroke-width="2" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+          <label for="p" data-t="password">የይለፍ ቃል</label>
+          <div class="inp-wrap pw">
+            <span class="inp-ico" aria-hidden="true">
+              <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+            </span>
+            <input id="p" name="password" type="password" autocomplete="current-password" placeholder="••••••••" required>
+            <button class="eye" type="button" id="eyeBtn" aria-label="Show password">
+              <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/>
+              </svg>
             </button>
           </div>
         </div>
-
-        <div class="row">
-          <button type="button" class="linkish" id="forgotBtn"
-                  data-am="የይለፍ ቃል ረሱ?" data-en="Forgot your password?"><?=
-            $lang === 'am' ? 'የይለፍ ቃል ረሱ?' : 'Forgot your password?' ?></button>
+        <div class="row-between">
+          <button type="button" class="link" id="forgotBtn" data-t="forgot">የይለፍ ቃል ረሱ?</button>
         </div>
-
-        <button class="btn" type="submit" id="submitBtn">
-          <span class="spin" aria-hidden="true"></span>
-          <span class="btn-label" data-am="ግባ" data-en="Sign in"><?= $lang === 'am' ? 'ግባ' : 'Sign in' ?></span>
+        <button class="btn" id="submitBtn" type="submit">
+          <span id="submitLbl" data-t="signin">ግባ</span>
+          <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M5 12h14"/><path d="m13 6 6 6-6 6"/>
+          </svg>
         </button>
       </form>
-
-      
-      <div class="recov" id="recovPanel" hidden>
-        <div class="recov-h" data-am="መለያዎን መልሶ ማግኘት" data-en="Recover your account"><?=
-          $lang === 'am' ? 'መለያዎን መልሶ ማግኘት' : 'Recover your account' ?></div>
-
-        <p class="recov-p" id="recovIntro"
-           data-am="የይለፍ ቃልዎን ማስተካከል የሚችለው አስተዳዳሪዎ ነው።"
-           data-en="Your administrator resets your password for you."><?=
-          $lang === 'am' ? 'የይለፍ ቃልዎን ማስተካከል የሚችለው አስተዳዳሪዎ ነው።'
-            : 'Your administrator resets your password for you.' ?></p>
-
-        <button type="button" class="linkish" id="recovCancel"
-                data-am="ተመለስ" data-en="Back to sign in"><?=
-          $lang === 'am' ? 'ተመለስ' : 'Back to sign in' ?></button>
-      </div>
     </div>
-  </main>
-</div>
+
+    <div class="recov" id="recovPanel">
+      <h2 data-t="recov_title">መለያዎን መልሶ ማግኘት</h2>
+      <p class="sub" data-t="recov_sub">የይለፍ ቃልዎን ማስተካከል የሚችለው አስተዳዳሪዎ ነው።</p>
+      <div class="recov-note">
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+        <span data-t="recov_body">እባክዎ የሰንበት ትምህርት ቤቱን አስተዳዳሪ ወይም ዋና አስተዳዳሪ ያነጋግሩ፤ አዲስ ጊዜያዊ የይለፍ ቃል ይሰጡዎታል፣ በመጀመሪያ መግቢያዎም የራስዎን ይመርጣሉ።</span>
+      </div>
+      <button type="button" class="btn alt" id="backBtn" data-t="back">ተመለስ</button>
+    </div>
+  </section>
+
+  <footer class="foot">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="M12 2v5M9.5 4.5h5M5 21V11l7-4 7 4v10M9 21v-5h6v5"/>
+    </svg>
+    <span id="footText"><?= e($schoolAm) ?></span>
+  </footer>
+  </section><!-- /.login-panel -->
+</main>
 
 <script>
-(function () {
-  'use strict';
-  var form = document.getElementById('loginForm'),
-      btn  = document.getElementById('submitBtn'),
-      errB = document.getElementById('errBox'), errT = document.getElementById('errText'),
-      okB  = document.getElementById('okBox'),  okT  = document.getElementById('okText'),
-      uEl  = document.getElementById('username'), pEl = document.getElementById('password'),
-      csrf = form.csrf_token.value,
-      lang = document.documentElement.lang === 'en' ? 'en' : 'am';
-
-  var MSG = {
-    am: { empty:'እባክዎ የተጠቃሚ ስም እና የይለፍ ቃል ያስገቡ።', net:'ከአገልጋዩ ጋር መገናኘት አልተቻለም። ግንኙነትዎን ያረጋግጡ።',
-          ok:'ገብተዋል። በማስተላለፍ ላይ…', wait:'በመግባት ላይ…', signin:'ግባ', show:'የይለፍ ቃል አሳይ', hide:'የይለፍ ቃል ደብቅ' },
-    en: { empty:'Please enter both your username and password.', net:'Could not reach the server. Check your connection.',
-          ok:'Signed in. Redirecting…', wait:'Signing in…', signin:'Sign in', show:'Show password', hide:'Hide password' }
+(() => {
+  const BOOT = {
+    school_am: <?= json_encode($schoolAm, JSON_UNESCAPED_UNICODE) ?>,
+    school_en: <?= json_encode($schoolEn, JSON_UNESCAPED_UNICODE) ?>,
+    csrf:      <?= json_encode($csrf) ?>,
+    lang:      <?= json_encode($langInit) ?>,
+    next:      <?= json_encode($next) ?>
   };
-  function t(k){ return MSG[lang][k]; }
 
-  
-  var ERR_AM = {
+  const T = {
+    am: {
+      tagline:'የተማሪዎች እና የክትትል ሥርዓት',
+      welcome:'እንኳን ደህና መጡ', sub:'ለመቀጠል በመለያዎ ይግቡ።',
+      username:'የተጠቃሚ ስም', password:'የይለፍ ቃል', uPh:'ለምሳሌ፡ master ወይም teacher1',
+      signin:'ግባ', signing:'በመግባት ላይ…', forgot:'የይለፍ ቃል ረሱ?',
+      recov_title:'መለያዎን መልሶ ማግኘት',
+      recov_sub:'የይለፍ ቃልዎን ማስተካከል የሚችለው አስተዳዳሪዎ ነው።',
+      recov_body:'እባክዎ የሰንበት ትምህርት ቤቱን አስተዳዳሪ ወይም ዋና አስተዳዳሪ ያነጋግሩ፤ አዲስ ጊዜያዊ የይለፍ ቃል ይሰጡዎታል፣ በመጀመሪያ መግቢያዎም የራስዎን ይመርጣሉ።',
+      back:'ተመለስ',
+      empty:'እባክዎ የተጠቃሚ ስምና የይለፍ ቃል ያስገቡ።',
+      net:'ከሰርቨሩ ጋር መገናኘት አልተቻለም። ኢንተርኔትዎን ያረጋግጡ።',
+      verse:'“እግዚአብሔር ዓለሙን እንዲሁ ወደደ፤ አንድያ ልጁን ሰጠ፤ በእርሱ የሚያምን ሁሉ የዘላለም ሕይወት እንዲኖረው እንጂ እንዳይጠፋ።”',
+      cite:'— ዮሐንስ 3፡16',
+      months:['መስከረም','ጥቅምት','ኅዳር','ታኅሣሥ','ጥር','የካቲት','መጋቢት','ሚያዝያ','ግንቦት','ሰኔ','ሐምሌ','ነሐሴ','ጳጉሜ'],
+      days:['እሑድ','ሰኞ','ማክሰኞ','ረቡዕ','ሐሙስ','ዓርብ','ቅዳሜ'], ec:'ዓ.ም'
+    },
+    en: {
+      tagline:'Student & Attendance Management System',
+      welcome:'Welcome back', sub:'Sign in with your account to continue.',
+      username:'Username', password:'Password', uPh:'e.g. master or teacher1',
+      signin:'Sign in', signing:'Signing in…', forgot:'Forgot your password?',
+      recov_title:'Account recovery',
+      recov_sub:'Passwords can only be reset by an administrator.',
+      recov_body:'Ask a school administrator or the master account holder to reset your password. You will receive a temporary password and be asked to choose your own on next sign-in.',
+      back:'Back to sign in',
+      empty:'Please enter both your username and password.',
+      net:'Could not reach the server. Check your connection and try again.',
+      verse:'“For God so loved the world that he gave his one and only Son, that whoever believes in him shall not perish but have eternal life.”',
+      cite:'— John 3:16',
+      months:['Meskerem','Tikimt','Hidar','Tahsas','Tir','Yekatit','Megabit','Miazia','Ginbot','Sene','Hamle','Nehase','Pagume'],
+      days:['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'], ec:'E.C.'
+    }
+  };
+
+  let csrf = BOOT.csrf;
+  let lang = localStorage.getItem('sr_lang_v2') || BOOT.lang || 'am';
+  if (!T[lang]) lang = 'am';
+
+  const $ = s => document.querySelector(s);
+  function applyLang() {
+    const t = T[lang];
+    document.documentElement.lang = lang;
+    document.cookie = 'sr_lang=' + lang + ';path=/;max-age=31536000;samesite=Lax';
+    document.querySelectorAll('[data-t]').forEach(el => {
+      const k = el.getAttribute('data-t');
+      if (t[k] !== undefined) el.textContent = t[k];
+    });
+    document.querySelectorAll('[data-lang]').forEach(b => b.classList.toggle('on', b.dataset.lang === lang));
+    const nm = lang === 'am' ? BOOT.school_am : BOOT.school_en;
+    $('#schoolTitle').textContent = nm;
+    $('#footText').textContent    = nm;
+    $('#u').placeholder           = t.uPh;
+    document.title = nm + ' · ' + t.signin;
+  }
+  document.querySelectorAll('[data-lang]').forEach(b => b.addEventListener('click', () => {
+    lang = b.dataset.lang; localStorage.setItem('sr_lang_v2', lang); applyLang();
+  }));
+
+  /* password visibility */
+  const pw = $('#p');
+  $('#eyeBtn').addEventListener('click', () => {
+    pw.type = pw.type === 'password' ? 'text' : 'password';
+    pw.focus();
+  });
+
+  /* forgot-password panel */
+  $('#forgotBtn').addEventListener('click', () => {
+    $('#signView').style.display = 'none';
+    $('#recovPanel').classList.add('show');
+  });
+  $('#backBtn').addEventListener('click', () => {
+    $('#recovPanel').classList.remove('show');
+    $('#signView').style.display = '';
+    $('#u').focus();
+  });
+
+  const ERR_AM = {
     bad_credentials : 'የተጠቃሚ ስም ወይም የይለፍ ቃል ትክክል አይደለም።',
     locked          : 'በተደጋጋሚ በተሳሳተ ሙከራ ምክንያት መለያው ለጊዜው ተቆልፏል። እባክዎ ትንሽ ቆይተው ይሞክሩ።',
     inactive        : 'ይህ መለያ ተሰናክሏል። አስተዳዳሪዎን ያነጋግሩ።',
     validation      : 'እባክዎ የተጠቃሚ ስም እና የይለፍ ቃል ያስገቡ።',
     csrf            : 'ክፍለ ጊዜው አልፎበታል። እባክዎ እንደገና ይሞክሩ።',
-    bad_key         : 'የመልሶ ማግኛ ቁልፉ ትክክል አይደለም።',
-    locked_out      : 'በተደጋጋሚ በተሳሳተ ሙከራ ምክንያት ለጊዜው ተቆልፏል። እባክዎ 15 ደቂቃ ቆይተው ይሞክሩ።',
     server          : 'በአገልጋዩ ላይ ችግር ተፈጥሯል። እባክዎ እንደገና ይሞክሩ።'
   };
-  function errMsg(err){
-    if (lang === 'am' && err.type && ERR_AM[err.type]) return ERR_AM[err.type];
-    return err.message || t('net');
+
+  function showErr(m) {
+    const b = $('#errBox'), txt = $('#errText');
+    if (m) { txt.textContent = m; b.classList.add('show'); }
+    else   { txt.textContent = ''; b.classList.remove('show'); }
   }
 
-  
-  document.querySelectorAll('.lang button').forEach(function (b) {
-    b.addEventListener('click', function () {
-      lang = b.dataset.lang;
-      document.cookie = 'sr_lang=' + lang + ';path=/;max-age=31536000;samesite=Lax';
-      document.documentElement.lang = lang;
-      document.querySelectorAll('.lang button').forEach(function (x) {
-        x.setAttribute('aria-pressed', String(x.dataset.lang === lang));
+  $('#loginForm').addEventListener('submit', async e => {
+    e.preventDefault();
+    showErr('');
+    const username = $('#u').value.trim();
+    const password = $('#p').value;
+    if (!username || !password) { showErr(T[lang].empty); return; }
+
+    const btn = $('#submitBtn'), lbl = $('#submitLbl');
+    btn.disabled = true; lbl.textContent = T[lang].signing;
+    try {
+      const r = await fetch('../api/auth.php', {
+        method:'POST', credentials:'same-origin',
+        headers:{'Content-Type':'application/json','Accept':'application/json','X-CSRF-Token':csrf,'X-Requested-With':'fetch'},
+        body: JSON.stringify({ action:'login', username, password, lang })
       });
-      document.querySelectorAll('[data-am][data-en]').forEach(function (el) {
-        el.innerHTML = el.dataset[lang];
-      });
-      
-      hideMsgs();
-    });
-  });
-
-  
-  var peek = document.getElementById('peek');
-  peek.addEventListener('click', function () {
-    var show = pEl.type === 'password';
-    pEl.type = show ? 'text' : 'password';
-    peek.setAttribute('aria-label', show ? t('hide') : t('show'));
-    pEl.focus();
-  });
-
-  function hideMsgs(){ errB.classList.remove('show'); okB.classList.remove('show');
-    uEl.removeAttribute('aria-invalid'); pEl.removeAttribute('aria-invalid'); }
-  function fail(msg, which){
-    okB.classList.remove('show');
-    errT.textContent = msg; errB.classList.add('show');
-    if (which !== 'none') { uEl.setAttribute('aria-invalid','true'); pEl.setAttribute('aria-invalid','true'); }
-    (which === 'user' ? uEl : pEl).focus();
-  }
-  function busy(on){
-    btn.disabled = on;
-    btn.classList.toggle('loading', on);
-    btn.querySelector('.btn-label').textContent = on ? t('wait') : t('signin');
-  }
-  [uEl, pEl].forEach(function (el) { el.addEventListener('input', hideMsgs); });
-
-  
-  var fBtn = document.getElementById('forgotBtn');
-  var rPanel = document.getElementById('recovPanel');
-
-  /* The recovery panel is informational only: password recovery is done by
-     an administrator in the app. The Master recovery-key form is not
-     exposed on the login screen. */
-  if (fBtn) fBtn.addEventListener('click', function () {
-    hideMsgs();
-    form.hidden = true; rPanel.hidden = false;
-  });
-
-  var rCancel = document.getElementById('recovCancel');
-  if (rCancel) rCancel.addEventListener('click', function () {
-    rPanel.hidden = true; form.hidden = false; hideMsgs();
-  });
-
-  form.addEventListener('submit', function (ev) {
-    ev.preventDefault();
-    hideMsgs();
-    var u = uEl.value.trim(), p = pEl.value;
-    if (!u || !p) { fail(t('empty'), u ? 'pass' : 'user'); return; }
-
-    busy(true);
-    fetch('../api/auth.php', {
-      method: 'POST',
-      credentials: 'same-origin',
-      headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf, 'X-Requested-With': 'fetch' },
-      body: JSON.stringify({ action:'login', username:u, password:p, lang: lang })
-    })
-    .then(function (r) { return r.json().then(function (j) { return { s:r.status, j:j }; }); })
-    .then(function (res) {
-      if (res.j && res.j.ok) {
-        okT.textContent = t('ok'); okB.classList.add('show');
-        
-        location.href = (res.j.data && res.j.data.redirect) || '../index.php';
+      const j = await r.json().catch(() => null);
+      if (!r.ok || !j || !j.ok) {
+        const err = (j && j.error) || {};
+        if (err.type === 'csrf') {
+          fetch('../api/auth.php?action=me', { credentials:'same-origin' })
+            .then(rr => rr.json())
+            .then(jj => { if (jj && jj.ok && jj.data && jj.data.csrf_token) csrf = jj.data.csrf_token; })
+            .catch(() => {});
+        }
+        const msg = (lang === 'am' && err.type && ERR_AM[err.type]) ? ERR_AM[err.type] : (err.message || 'Sign-in failed.');
+        showErr(msg);
+        $('#p').select();
+      } else {
+        location.href = (j.data && j.data.redirect) || ('../' + (BOOT.next || 'index.php'));
         return;
       }
-      busy(false);
-      var err = (res.j && res.j.error) || {};
-      
-      if (err.type === 'csrf') {
-        fetch('../api/auth.php?action=me', { credentials:'same-origin' })
-          .then(function (r) { return r.json(); })
-          .then(function (j) { if (j && j.ok && j.data && j.data.csrf_token) csrf = j.data.csrf_token; })
-          .catch(function(){});
-      }
-      fail(errMsg(err), err.type === 'bad_credentials' ? 'pass' : 'none');
-    })
-    .catch(function () { busy(false); fail(t('net'), 'none'); });
+    } catch (_) {
+      showErr(T[lang].net);
+    }
+    btn.disabled = false; lbl.textContent = T[lang].signin;
   });
-})();
 
-</script></body>
+  applyLang();
+})();
+</script>
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => navigator.serviceWorker.register('../sw.js', { scope: '../' }).catch(() => {}));
+}
+</script>
+</body>
 </html>
