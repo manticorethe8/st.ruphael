@@ -164,5 +164,16 @@ function sr_run_migrations(): array
         if (!(int)$has->fetchColumn()) { $add->execute($row); $log[] = "settings.{$row[0]}: added (v2.4.2)"; }
     }
 
+    /* --- 11. index for the shared per-IP login failure budget -------- */
+    if (sr_has_table('login_attempts')) {
+        $idx = $db->prepare("SELECT 1 FROM information_schema.STATISTICS
+                             WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND INDEX_NAME = ?");
+        $idx->execute(['login_attempts', 'idx_la_ip']);
+        if (!$idx->fetchColumn()) {
+            $db->exec("ALTER TABLE login_attempts ADD INDEX idx_la_ip (ip_address, created_at)");
+            $log[] = 'login_attempts.idx_la_ip: added';
+        }
+    }
+
     return $log;
 }

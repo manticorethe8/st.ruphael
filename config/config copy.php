@@ -22,11 +22,11 @@ if (!function_exists('sr_define')) {
 }
 
 /* -------- Database (XAMPP defaults) -------- */
-sr_define('DB_HOST', getenv('SR_DB_HOST') ?: 'sql210.infinityfree.com');
+sr_define('DB_HOST', getenv('SR_DB_HOST') ?: '127.0.0.1');
 sr_define('DB_PORT', getenv('SR_DB_PORT') ?: '3306');
-sr_define('DB_NAME', getenv('SR_DB_NAME') ?: 'if0_42452540_st_rufael');
-sr_define('DB_USER', getenv('SR_DB_USER') ?: 'if0_42452540');
-sr_define('DB_PASS', getenv('SR_DB_PASS') ?: 'tT9MWJRsPAStpe');
+sr_define('DB_NAME', getenv('SR_DB_NAME') ?: 'st_rufael');
+sr_define('DB_USER', getenv('SR_DB_USER') ?: 'root');
+sr_define('DB_PASS', getenv('SR_DB_PASS') ?: '');
 sr_define('DB_CHARSET', 'utf8mb4');
 
 /* -------- Session / security -------- */

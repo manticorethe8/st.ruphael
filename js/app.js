@@ -596,10 +596,7 @@ function welcomeSection(){
     </div>
     <div class="dash-intro-side">
       <div class="dash-period"><span class="dash-period-date">${ICON.cal}${todayLbl()}</span><span class="dash-period-year">${yrText(yr)} · ${t('curYear')}</span></div>
-      <div class="dash-intro-actions">
-        <a class="btn btn-soft" href="#/grades">${ICON.grid}<span>${L('የክፍል መዝገብ','Class registers')}</span></a>
-        ${can('students.create') ? `<a class="btn btn-primary" href="#/add">${ICON.plus}<span>${t('addStudent')}</span></a>` : ''}
-      </div>
+      ${can('students.create') ? `<div class="dash-intro-actions"><a class="btn btn-primary" href="#/add">${ICON.plus}<span>${t('addStudent')}</span></a></div>` : ''}
     </div>
   </section>`;
 }
@@ -680,72 +677,34 @@ async function renderDashboard(){
   DATA.alertsUnread = al.unread || 0;
   updateBell();
 
-  const rate = LANG === 'am' ? toGeez(Math.round(stats.rate)) : stats.rate;
-  const metric = (icon, tone, label, value, detail) => `
-    <article class="dash-kpi ${tone}">
-      <div class="dash-kpi-top"><span class="dash-kpi-icon">${icon}</span><span class="dash-kpi-label">${label}</span></div>
-      <strong class="dash-kpi-value">${value}</strong>
-      <span class="dash-kpi-detail">${detail}</span>
-    </article>`;
+  const hasMarks = Number(stats.marked) > 0;
+  const rate = hasMarks ? langNum(Math.round(Number(stats.rate) || 0)) : '—';
+  const safeRate = hasMarks ? Math.max(0, Math.min(100, Number(stats.rate) || 0)) : 0;
   const summary = `
-  <section id="sec-summary" class="dash-summary">
-    <div class="dash-section-heading"><div><span class="dash-eyebrow">${L('በአጠቃላይ','AT A GLANCE')}</span><h2>${t('sumT')}</h2></div><span class="dash-summary-year">${yrText(stats.et_year)}${stats.scoped ? ' · ' + t('tcClasses') : ''}</span></div>
-    <div class="dash-kpi-grid">
-      ${metric(ICON.users,'students',t('stTotal'),langNum(stats.students),L('የተመዘገቡ ተማሪዎች','Students enrolled'))}
-      ${metric(ICON.target,'rate',t('stRate'),rate+'%',`${langNum(stats.present)} ${t('stPresent')} · ${langNum(stats.marked)}`)}
-      ${metric(ICON.grid,'classes',t('tcClasses'),langNum(CLASSES.length),t('curYear'))}
-      ${metric(ICON.bell,'alerts',t('stUnread'),langNum(DATA.alertsUnread),L('ለክትትል','Need follow-up'))}
+  <section class="overview-grid" aria-label="${L('የመገኘት ማጠቃለያ','Attendance overview')}">
+    <div class="overview-feature">
+      <div class="overview-copy">
+        <span class="overview-eyebrow">${L('የዚህ ዓመት አጠቃላይ እይታ','THIS YEAR AT A GLANCE')}</span>
+        <h2>${t('stRate')}</h2>
+        <p>${hasMarks ? L('ከተመዘገቡ የመገኘት መዝገቦች ውስጥ','Across recorded attendance marks') : L('እስካሁን የመገኘት መዝገብ የለም','No attendance recorded yet')}</p>
+        ${hasMarks ? `<div class="overview-legend"><span><i class="overview-dot present"></i>${langNum(stats.present)} ${t('stPresent')}</span><span><i class="overview-dot absent"></i>${langNum(stats.absent)} ${t('stAbsent')}</span></div>` : ''}
+      </div>
+      <div class="overview-ring" role="img" aria-label="${t('stRate')}: ${hasMarks ? rate + '%' : L('መረጃ የለም','No data')}" style="--progress:${safeRate}%">
+        <div class="overview-ring-inner"><strong>${rate}${hasMarks ? '%' : ''}</strong><span>${t('stRate')}</span></div>
+      </div>
+    </div>
+    <div class="overview-stat">
+      <span class="overview-stat-icon" aria-hidden="true">${ICON.users}</span>
+      <span class="overview-stat-label">${t('stTotal')}</span>
+      <strong>${langNum(stats.students)}</strong>
+      <p>${L('በአሁኑ ዓመት የተመዘገቡ','Enrolled this year')}</p>
+      <a href="#/grades">${L('ክፍሎችን ይመልከቱ','Browse classes')} <span aria-hidden="true">→</span></a>
     </div>
   </section>`;
 
-  /* ---------------------------------------------------------------
-     Charts. Everything below is hand-built inline SVG: there is no
-     charting library on this project (no Composer, no CDN — see the
-     Bootstrap rule), and a dependency would dwarf the four shapes we
-     actually need. Every figure comes from attendance.stats, which
-     joins `s.deleted_at IS NULL` and reads live rows, so corrections
-     and soft deletes are already reflected.
-     --------------------------------------------------------------- */
-
-  /* Donut: the present/absent/excused split, drawn with stroke-dasharray
-     on three arcs of one circle. r=54 keeps the maths readable. */
-  const donut = (() => {
-    const marked = stats.marked || 0;
-    if (!marked) return '';
-    const R = 54, C = 2 * Math.PI * R;
-    const seg = [
-      { v: stats.present, cls: 'g', lbl: t('stPresent') },
-      { v: stats.absent,  cls: 'r', lbl: t('stAbsent')  },
-      { v: stats.excused, cls: 'a', lbl: t('stLate')    },
-    ];
-    let off = 0;
-    const arcs = seg.map(x => {
-      const frac = x.v / marked, len = frac * C;
-      const a = `<circle class="dn-arc ${x.cls}" cx="70" cy="70" r="${R}"
-                   stroke-dasharray="${len.toFixed(2)} ${(C - len).toFixed(2)}"
-                   stroke-dashoffset="${(-off).toFixed(2)}"/>`;
-      off += len;
-      return a;
-    }).join('');
-    const keys = seg.map(x => `
-      <li><i class="dn-k ${x.cls}"></i><span>${x.lbl}</span>
-          <b>${langNum(x.v)}</b>
-          <em>${langNum(Math.round((x.v / marked) * 100))}%</em></li>`).join('');
-    return `
-      <div class="ch-card">
-        <div class="ch-h"><h3>${LANG === 'am' ? 'የመገኘት ስብጥር' : 'Attendance split'}</h3>
-          <span class="ch-sub">${langNum(marked)} ${LANG === 'am' ? 'መዝገቦች' : 'records'}</span></div>
-        <div class="dn-wrap">
-          <svg class="dn" viewBox="0 0 140 140" role="img"
-               aria-label="${esc(t('stPresent'))} ${langNum(stats.present)}, ${esc(t('stAbsent'))} ${langNum(stats.absent)}, ${esc(t('stLate'))} ${langNum(stats.excused)}">
-            <circle class="dn-bg" cx="70" cy="70" r="${R}"/>
-            ${arcs}
-          </svg>
-          <div class="dn-mid"><b>${rate}%</b><span>${t('stRate')}</span></div>
-        </div>
-        <ul class="dn-keys">${keys}</ul>
-      </div>`;
-  })();
+  /* Trends are drawn from live attendance stats, without a charting
+     dependency. The overview ring already shows the attendance rate,
+     so do not repeat a second donut chart below it. */
 
   /* Trend: attendance rate per Ethiopian month as a filled area + line.
      Months with nothing recorded are dropped so an empty tail does not
@@ -769,6 +728,7 @@ async function renderDashboard(){
       </circle>`).join('');
     /* Label every month when they fit, every other one when they do not. */
     const step = ms.length > 8 ? 2 : 1;
+    const trendDescription = ms.map(m => `${LANG === 'am' ? m.name_am : m.name_en}: ${langNum(Math.round(m.rate))}%`).join(', ');
     const labs = ms.map((m, i) => (i % step) ? '' : `
       <text class="tr-ax" x="${x(i).toFixed(1)}" y="${H - 7}" text-anchor="middle">${esc((LANG === 'am' ? m.name_am : m.name_en).slice(0, 3))}</text>`).join('');
     return `
@@ -776,7 +736,7 @@ async function renderDashboard(){
         <div class="ch-h"><h3>${LANG === 'am' ? 'የመገኘት አዝማሚያ' : 'Attendance trend'}</h3>
           <span class="ch-sub">${LANG === 'am' ? 'በወር፣ በመቶኛ' : 'Rate by month'}</span></div>
         <svg class="tr" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img"
-             aria-label="${LANG === 'am' ? 'የወርሃዊ የመገኘት አዝማሚያ' : 'Monthly attendance rate trend'}">
+             aria-label="${esc(trendDescription)}">
           <defs><linearGradient id="trFill" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stop-color="var(--blue-500)" stop-opacity=".26"/>
             <stop offset="100%" stop-color="var(--blue-500)" stop-opacity="0"/>
@@ -814,19 +774,26 @@ async function renderDashboard(){
       </div>`;
   })();
 
-  const charts = (donut || trend || dayCmp) ? `
+  const charts = `
   <section id="sec-charts" class="dash-analytics">
-    <div class="dash-section-heading"><div><span class="dash-eyebrow">${L('የመገኘት መረጃ','ATTENDANCE DATA')}</span><h2>${L('የመገኘት አዝማሚያዎች','Attendance patterns')}</h2></div></div>
-    <div class="ch-grid">${donut}${dayCmp}${trend}</div>
-  </section>` : '';
+    <div class="dash-section-heading"><div><h2>${L('የመገኘት አዝማሚያዎች','Attendance patterns')}</h2></div></div>
+    ${trend || dayCmp ? `<div class="ch-grid">${dayCmp}${trend}</div>` : `
+      <div class="dash-chart-empty" role="status">
+        <span class="dash-chart-empty-icon" aria-hidden="true">${ICON.target}</span>
+        <strong>${L('አዝማሚያዎች ገና አልተገኙም','No trends to show yet')}</strong>
+        <p>${L('የመገኘት ምልክቶች ሲመዘገቡ የቀን እና የወር አዝማሚያዎች እዚህ ይታያሉ።','Record attendance to see session-day and monthly trends here.')}</p>
+      </div>`}
+  </section>`;
 
   return `
-    ${welcomeSection()}
-    ${searchSection()}
-    ${summary}
-    <div class="dash-main-grid ${FEAT('attendanceAlerts') ? 'has-alerts' : 'solo'}">
-      <div class="dash-main-primary">${charts}${classesEntrySection()}</div>
-      ${FEAT('attendanceAlerts') ? `<aside class="dash-main-rail">${alertsSection(DATA.alerts)}</aside>` : ''}
+    <div class="dashboard-modern">
+      ${welcomeSection()}
+      ${searchSection()}
+      ${summary}
+      <div class="dash-main-grid ${FEAT('attendanceAlerts') ? 'has-alerts' : 'solo'}">
+        <div class="dash-main-primary">${charts}${classesEntrySection()}</div>
+        ${FEAT('attendanceAlerts') ? `<aside class="dash-main-rail">${alertsSection(DATA.alerts)}</aside>` : ''}
+      </div>
     </div>`;
 }
 
@@ -1637,6 +1604,7 @@ function parseHash(){
 async function route(){
   currentParts = parseHash();
   const name = currentParts[0];
+  document.body.classList.toggle('on-dashboard', name === 'dashboard');
   if (state.modal && state.modal.type !== 'loading'){ state.modal = null; mountModal(); }
   const view = viewFor(name);
   updateNavActive();
