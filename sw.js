@@ -26,23 +26,21 @@
    drop the old shell and pick up new HTML/CSS/JS. Forgetting to bump it is
    the classic "my changes aren't showing up" bug. Keep it in step with
    APP_VERSION in config/config.php. */
-const VERSION     = 'sr-v2.6.8';
+const VERSION     = 'sr-v2.6.9';
 const SHELL_CACHE = VERSION + '-shell';
 const RUNTIME     = VERSION + '-runtime';
 
 /* Files that make the app usable with no network. Relative URLs
    so the app works from any sub-directory under htdocs/. */
 const SHELL = [
-  './',
-  'index.php',
   'offline.html',
   'manifest.json',
-  'css/styles-v2.6.8.min.css',
+  'css/styles.min.css',
   'css/fonts.min.css',
   'vendor/bootstrap.min.css',
   'js/features.min.js',
   'js/api.min.js',
-  'js/app-v2.6.8.min.js',
+  'js/app.min.js',
   'js/admin.min.js',
   'assets/logo.png',
   'assets/icons/icon-192.png',
@@ -134,7 +132,7 @@ self.addEventListener('fetch', event => {
          never shown after a sign-out. --- */
   if (isAuthPage(url)) return;
 
-  /* --- Navigations: network first, shell as the fallback. --- */
+  /* --- Navigations: never cache a user-specific HTML page. --- */
   if (req.mode === 'navigate') {
     event.respondWith((async () => {
       try {
@@ -143,8 +141,7 @@ self.addEventListener('fetch', event => {
         return await fetch(req);
       } catch (e) {
         const cache = await caches.open(SHELL_CACHE);
-        return (await cache.match('index.php'))
-            || (await cache.match('offline.html'))
+        return (await cache.match('offline.html'))
             || new Response('Offline', { status: 503 });
       }
     })());

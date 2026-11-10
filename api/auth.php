@@ -34,6 +34,21 @@ case 'login': {
         json_error('Enter both your username and your password.', 422, 'validation');
     }
 
+    if (mb_strlen($username) > 64 || strlen($password) > 4096) {
+        json_error('Invalid sign-in details.', 422, 'validation');
+    }
+
+    /* Bound both targeted guessing and username rotation from a single IP.
+       Use REMOTE_ADDR only; client-supplied forwarding headers are untrusted. */
+    $ipThrottle = db()->prepare("SELECT COUNT(*) FROM login_attempts
+                                WHERE ip_address = ? AND success = 0
+                                  AND created_at > (NOW() - INTERVAL ? SECOND)");
+    $ipThrottle->execute([$ip, LOGIN_LOCKOUT_SECONDS]);
+    if ((int)$ipThrottle->fetchColumn() >= LOGIN_IP_MAX_ATTEMPTS) {
+        audit('auth.ip_locked_out', 'user', null, 'IP login limit reached');
+        json_error('Too many failed attempts. Please wait 15 minutes and try again.', 429, 'locked_out');
+    }
+
     /* throttle: too many failures for this username+ip */
     $th = db()->prepare("SELECT COUNT(*) FROM login_attempts
                          WHERE username = ? AND ip_address = ? AND success = 0
@@ -122,6 +137,19 @@ case 'recover': {
 
     if ($username === '' || trim($key) === '') {
         json_error('Enter the Master username and the recovery key.', 422, 'validation');
+    }
+
+    if (mb_strlen($username) > 64 || strlen($key) > 4096) {
+        json_error('Invalid recovery details.', 422, 'validation');
+    }
+
+    /* Recovery shares the IP budget with sign-in, not just the account budget. */
+    $ipThrottle = db()->prepare("SELECT COUNT(*) FROM login_attempts
+                                WHERE ip_address = ? AND success = 0
+                                  AND created_at > (NOW() - INTERVAL ? SECOND)");
+    $ipThrottle->execute([$ip, LOGIN_LOCKOUT_SECONDS]);
+    if ((int)$ipThrottle->fetchColumn() >= LOGIN_IP_MAX_ATTEMPTS) {
+        json_error('Too many failed attempts. Please wait 15 minutes and try again.', 429, 'locked_out');
     }
 
     /* Same throttle as login, keyed the same way, checked before the

@@ -8,13 +8,17 @@ require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../config/auth.php';
 require_once __DIR__ . '/../lib/helpers.php';
 
+header('Cache-Control: no-store, max-age=0');
+header('X-Frame-Options: DENY');
+header('X-Content-Type-Options: nosniff');
+
 if (!sr_is_installed()) { header('Location: ../install.php'); exit; }
 $user = current_user();
 if (!$user) { header('Location: login.php'); exit; }
 if ((int)($user['must_change_pw'] ?? 0) !== 1) { header('Location: ../index.php'); exit; }
 
 $next = trim((string)($_GET['next'] ?? ''));
-if ($next !== '' && ($next[0] === '/' || strpos($next, '://') !== false || strpos($next, '..') !== false)) $next = '';
+if ($next !== '' && !preg_match('/\A[a-zA-Z0-9_-]+\.php\z/D', $next)) $next = '';
 $schoolAm = setting('school_name_am', APP_NAME_AM);
 $schoolEn = setting('school_name_en', APP_NAME_EN);
 if (sr_brand_always_amharic() && $schoolAm !== '') $schoolEn = $schoolAm;
@@ -121,8 +125,8 @@ if (sr_brand_always_amharic() && $schoolAm !== '') $schoolEn = $schoolAm;
        background:var(--bad-bg);color:var(--bad-ink);border:1px solid #FECACA}
   .msg.show{display:block}
   .out{display:flex;justify-content:center;margin-top:14px;font-size:12.5px}
-  .out a{color:var(--muted);text-decoration:none;font-weight:500;padding:4px 10px;border-radius:9999px}
-  .out a:hover{color:var(--ink);background:var(--subtle)}
+  .out button{border:0;background:transparent;font:inherit;cursor:pointer;color:var(--muted);text-decoration:none;font-weight:500;padding:4px 10px;border-radius:9999px}
+  .out button:hover{color:var(--ink);background:var(--subtle)}
 </style>
 </head>
 <body>
@@ -177,7 +181,7 @@ if (sr_brand_always_amharic() && $schoolAm !== '') $schoolEn = $schoolAm;
       <button class="btn" id="go" type="submit" disabled data-t="save">አስቀምጥና ቀጥል</button>
     </form>
 
-    <div class="out"><a href="logout.php" data-t="signout">ውጣ</a></div>
+    <div class="out"><form action="logout.php" method="post"><input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>"><button type="submit" data-t="signout">ውጣ</button></form></div>
   </main>
 </div>
 
@@ -185,7 +189,7 @@ if (sr_brand_always_amharic() && $schoolAm !== '') $schoolEn = $schoolAm;
 (() => {
   const CSRF = <?= json_encode(csrf_token()) ?>;
   const NEXT = <?= json_encode($next) ?>;
-  const SCHOOL = { am: <?= json_encode($schoolAm, JSON_UNESCAPED_UNICODE) ?>, en: <?= json_encode($schoolEn, JSON_UNESCAPED_UNICODE) ?> };
+  const SCHOOL = { am: <?= json_encode($schoolAm, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>, en: <?= json_encode($schoolEn, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?> };
   const T = {
     am:{ title:'አዲስ የይለፍ ቃል ይምረጡ',
          sub:'ለመቀጠል እባክዎ የራስዎን የይለፍ ቃል ያዘጋጁ። ይህ የሚጠየቀው አንድ ጊዜ ብቻ ነው።',

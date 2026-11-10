@@ -22,11 +22,11 @@ if (!function_exists('sr_define')) {
 }
 
 /* -------- Database (XAMPP defaults) -------- */
-sr_define('DB_HOST', getenv('SR_DB_HOST') ?: 'sql210.infinityfree.com');
+sr_define('DB_HOST', getenv('SR_DB_HOST') ?: '127.0.0.1');
 sr_define('DB_PORT', getenv('SR_DB_PORT') ?: '3306');
-sr_define('DB_NAME', getenv('SR_DB_NAME') ?: 'if0_42452540_st_rufael');
-sr_define('DB_USER', getenv('SR_DB_USER') ?: 'if0_42452540');
-sr_define('DB_PASS', getenv('SR_DB_PASS') ?: 'tT9MWJRsPAStpe');
+sr_define('DB_NAME', getenv('SR_DB_NAME') ?: 'st_rufael');
+sr_define('DB_USER', getenv('SR_DB_USER') ?: 'root');
+sr_define('DB_PASS', getenv('SR_DB_PASS') ?: '');
 sr_define('DB_CHARSET', 'utf8mb4');
 
 /* -------- Session / security -------- */
@@ -35,6 +35,7 @@ sr_define('SESSION_IDLE_TIMEOUT', 60 * 60 * 2);   // 2 hours of inactivity
 sr_define('SESSION_ABSOLUTE_TIMEOUT', 60 * 60 * 12);
 sr_define('LOGIN_MAX_ATTEMPTS', 8);               // per username+ip / 15 min
 sr_define('LOGIN_LOCKOUT_SECONDS', 900);
+sr_define('LOGIN_IP_MAX_ATTEMPTS', 40);  // shared IP budget; allow a busy school network
 
 /* -------- Paths -------- */
 sr_define('SR_ROOT', dirname(__DIR__));
@@ -66,7 +67,7 @@ sr_define('SR_PHOTO_MAX_BYTES', 2 * 1024 * 1024);   // 2 MB
 /* -------- Misc -------- */
 sr_define('APP_NAME_AM', 'ቅዱስ ሩፋኤል የሰንበት ትምህርት ቤት');
 sr_define('APP_NAME_EN', 'St. Rufael Church School');
-sr_define('APP_VERSION', '2.6.8');
+sr_define('APP_VERSION', '2.6.9');
 
 /* Marker file written by install.php once the schema exists */
 sr_define('INSTALL_LOCK', SR_ROOT . '/config/installed.lock');

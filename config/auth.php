@@ -11,8 +11,13 @@ require_once __DIR__ . '/../lib/helpers.php';
 function sr_session_start(): void
 {
     if (session_status() === PHP_SESSION_ACTIVE) return;
+    // Only a proxy explicitly listed by the operator may assert TLS.
+    $trustedProxies = array_filter(array_map('trim', explode(',', (string)(getenv('SR_TRUSTED_PROXY_IPS') ?: ''))));
     $https = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
-          || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https');
+          || (in_array($_SERVER['REMOTE_ADDR'] ?? '', $trustedProxies, true)
+              && strtolower($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https');
+    ini_set('session.use_strict_mode', '1');
+    ini_set('session.use_only_cookies', '1');
     session_name(SESSION_NAME);
     session_set_cookie_params([
         'lifetime' => 0,

@@ -1,0 +1,2 @@
+# Apache: exported student records must never be browsable directly.
+Require all denied

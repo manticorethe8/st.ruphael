@@ -9,6 +9,11 @@ require_once __DIR__ . '/config/database.php';
 require_once __DIR__ . '/config/auth.php';
 require_once __DIR__ . '/lib/helpers.php';
 
+header('Cache-Control: private, no-store, max-age=0');
+header('X-Content-Type-Options: nosniff');
+header('Referrer-Policy: same-origin');
+header('X-Frame-Options: DENY');
+
 if (!sr_is_installed()) { header('Location: install.php'); exit; }
 
 $user = current_user();
@@ -253,7 +258,7 @@ $roleEn   = ucfirst($user['role']);
 <div class="save-pill" id="savePill" role="status" aria-live="polite"><span class="sp-ic" aria-hidden="true">✓</span><span id="savePillTxt">ተቀምጧል</span></div>
 <noscript><div class="noscript-msg">This platform requires JavaScript. እባክዎ JavaScript ያንቁ።</div></noscript>
 
-<script>window.SR_BOOT = <?= json_encode($boot, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
+<script>window.SR_BOOT = <?= json_encode($boot, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
 
 </script><script src="js/features.min.js"></script>
 <script src="js/api.min.js"></script>

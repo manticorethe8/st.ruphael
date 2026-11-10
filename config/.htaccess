@@ -1,0 +1,2 @@
+# Apache: prevent web access to credentials and schema while PHP includes still work.
+Require all denied

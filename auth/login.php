@@ -11,6 +11,11 @@ require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../config/auth.php';
 require_once __DIR__ . '/../lib/helpers.php';
 
+header('Cache-Control: no-store, max-age=0');
+header('X-Content-Type-Options: nosniff');
+header('Referrer-Policy: same-origin');
+header('X-Frame-Options: DENY');
+
 if (!sr_is_installed()) {
     header('Location: ../install.php');
     exit;
@@ -30,8 +35,8 @@ $quoteRef = trim((string)setting('login_quote_ref', 'ዮሐንስ 3፡16'));
 $csrf     = csrf_token();
 $langInit = (($_COOKIE['sr_lang'] ?? 'am') === 'en') ? 'en' : 'am';
 $next     = trim((string)($_GET['next'] ?? ''));
-/* only accept local relative paths — never redirect off-site */
-if ($next !== '' && ($next[0] === '/' || strpos($next, '://') !== false || strpos($next, '..') !== false)) {
+/* Only allow a simple in-app path, never a protocol, query or traversal. */
+if ($next !== '' && !preg_match('/\A[a-zA-Z0-9_-]+\.php\z/D', $next)) {
     $next = '';
 }
 ?>
@@ -97,6 +102,7 @@ if ($next !== '' && ($next[0] === '/' || strpos($next, '://') !== false || strpo
   input::placeholder{color:#98a5b2;font-weight:400}
   .pw .eye{display:grid;place-items:center;flex:0 0 38px;width:38px;height:38px;margin-right:3px;border:0;border-radius:8px;background:transparent;color:#8291a2;cursor:pointer}
   .pw .eye:hover{background:#edf2f7;color:var(--ink)}
+  .caps-hint{margin:-8px 0 12px;color:#755b00;font-size:12px;font-weight:600}
   .row-between{display:flex;align-items:center;justify-content:flex-end;margin:0 0 16px}
   .link{padding:4px 0;border:0;background:transparent;color:var(--primary);font:600 11px var(--font);cursor:pointer}
   .link:hover{color:var(--primary-dark);text-decoration:underline}
@@ -119,7 +125,7 @@ if ($next !== '' && ($next[0] === '/' || strpos($next, '://') !== false || strpo
     .seal-wrap{grid-column:1;grid-row:1/3;margin:0}.seal{width:44px;height:44px;padding:2px}
     .hero-brand h1{grid-column:2;grid-row:1;margin:0 0 3px;font-size:20px}
     .hero-brand p{grid-column:2;grid-row:2;font-size:10.5px}
-    .verse-card{padding:8px 10px;gap:8px}.verse-icon{width:23px;height:23px;flex-basis:23px;border-radius:6px}
+    .verse-card{display:none;padding:8px 10px;gap:8px}.verse-icon{width:23px;height:23px;flex-basis:23px;border-radius:6px}
     .verse-body p{font-size:9.5px;line-height:1.45}.verse-body cite{margin-top:2px;font-size:9px}
     .login-panel{flex:1;min-height:0;padding:15px 22px max(16px,env(safe-area-inset-bottom))}
     .top-meta{justify-content:space-between}
@@ -130,7 +136,7 @@ if ($next !== '' && ($next[0] === '/' || strpos($next, '://') !== false || strpo
     .btn{min-height:47px}.foot{padding-top:10px}
   }
   @media(max-width:360px){
-    .welcome-panel{min-height:190px;padding:18px 16px 13px}
+    .welcome-panel{padding:16px}
     .hero-brand{grid-template-columns:42px minmax(0,1fr);column-gap:9px}
     .seal{width:40px;height:40px}.hero-brand h1{font-size:18px}
     .login-panel{padding-inline:18px}
@@ -138,14 +144,22 @@ if ($next !== '' && ($next[0] === '/' || strpos($next, '://') !== false || strpo
     .version-pill{font-size:8.5px}.lang button{min-height:30px;padding-inline:8px;font-size:9.5px}
   }
   @media(max-width:760px) and (max-height:620px){
-    .welcome-panel{min-height:174px;gap:9px;padding-block:14px 11px}
+    .welcome-panel{gap:9px;padding-block:14px 11px}
     .seal{width:38px;height:38px}.hero-brand h1{font-size:18px}
     .verse-card{padding:7px 9px}.verse-body p{font-size:9px}
     .login-panel{padding-top:10px}.card{padding:10px 0}
     .card h2{font-size:20px}.card .sub{margin-bottom:12px}
     .field{margin-bottom:8px}label{margin-bottom:4px;font-size:10.5px}
-    input[type=text],input[type=password]{height:40px}.row-between{margin-bottom:8px}.btn{min-height:42px}
+    input[type=text],input[type=password]{height:46px}.row-between{margin-bottom:8px}.btn{min-height:46px}
   }
+  /* Larger labels and help text remain readable in both scripts. */
+  .card .sub,.recov-note{font-size:14px}
+  label{font-size:13px}
+  input[type=text],input[type=password]{font-size:16px}
+  .link{font-size:13px;min-height:44px}
+  .msg{font-size:13px}
+  .lang button{min-height:40px;font-size:12px}
+  :focus-visible{outline:3px solid #d09919;outline-offset:3px}
   @media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;transition:none!important;animation:none!important}}
 </style>
 </head>
@@ -205,7 +219,7 @@ if ($next !== '' && ($next[0] === '/' || strpos($next, '://') !== false || strpo
       <h2 data-t="welcome">እንኳን ደህና መጡ</h2>
       <p class="sub" data-t="sub">ለመቀጠል በመለያዎ ይግቡ።</p>
 
-      <div class="msg err" id="errBox" role="alert">
+      <div class="msg err" id="errBox" role="alert" aria-live="assertive">
         <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
         <span id="errText"></span>
       </div>
@@ -217,7 +231,7 @@ if ($next !== '' && ($next[0] === '/' || strpos($next, '://') !== false || strpo
             <span class="inp-ico" aria-hidden="true">
               <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 20a8 8 0 0 1 16 0"/></svg>
             </span>
-            <input id="u" name="username" type="text" autocomplete="username" autocapitalize="none" spellcheck="false" required autofocus>
+            <input id="u" name="username" type="text" autocomplete="username" maxlength="64" autocapitalize="none" spellcheck="false" required autofocus>
           </div>
         </div>
         <div class="field">
@@ -227,13 +241,14 @@ if ($next !== '' && ($next[0] === '/' || strpos($next, '://') !== false || strpo
               <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
             </span>
             <input id="p" name="password" type="password" autocomplete="current-password" placeholder="••••••••" required>
-            <button class="eye" type="button" id="eyeBtn" aria-label="Show password">
+            <button class="eye" type="button" id="eyeBtn" aria-label="Show password" aria-pressed="false">
               <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/>
               </svg>
             </button>
           </div>
         </div>
+        <p id="capsHint" class="caps-hint" hidden></p>
         <div class="row-between">
           <button type="button" class="link" id="forgotBtn" data-t="forgot">የይለፍ ቃል ረሱ?</button>
         </div>
@@ -269,8 +284,8 @@ if ($next !== '' && ($next[0] === '/' || strpos($next, '://') !== false || strpo
 <script>
 (() => {
   const BOOT = {
-    school_am: <?= json_encode($schoolAm, JSON_UNESCAPED_UNICODE) ?>,
-    school_en: <?= json_encode($schoolEn, JSON_UNESCAPED_UNICODE) ?>,
+    school_am: <?= json_encode($schoolAm, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>,
+    school_en: <?= json_encode($schoolEn, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>,
     csrf:      <?= json_encode($csrf) ?>,
     lang:      <?= json_encode($langInit) ?>,
     next:      <?= json_encode($next) ?>
@@ -280,7 +295,7 @@ if ($next !== '' && ($next[0] === '/' || strpos($next, '://') !== false || strpo
     am: {
       tagline:'የተማሪዎች እና የክትትል ሥርዓት',
       welcome:'እንኳን ደህና መጡ', sub:'ለመቀጠል በመለያዎ ይግቡ።',
-      username:'የተጠቃሚ ስም', password:'የይለፍ ቃል', uPh:'ለምሳሌ፡ master ወይም teacher1',
+      username:'የተጠቃሚ ስም', password:'የይለፍ ቃል', uPh:'የተጠቃሚ ስምዎን ያስገቡ',
       signin:'ግባ', signing:'በመግባት ላይ…', forgot:'የይለፍ ቃል ረሱ?',
       recov_title:'መለያዎን መልሶ ማግኘት',
       recov_sub:'የይለፍ ቃልዎን ማስተካከል የሚችለው አስተዳዳሪዎ ነው።',
@@ -288,6 +303,7 @@ if ($next !== '' && ($next[0] === '/' || strpos($next, '://') !== false || strpo
       back:'ተመለስ',
       empty:'እባክዎ የተጠቃሚ ስምና የይለፍ ቃል ያስገቡ።',
       net:'ከሰርቨሩ ጋር መገናኘት አልተቻለም። ኢንተርኔትዎን ያረጋግጡ።',
+      caps:'Caps Lock በርቷል',
       verse:'“እግዚአብሔር ዓለሙን እንዲሁ ወደደ፤ አንድያ ልጁን ሰጠ፤ በእርሱ የሚያምን ሁሉ የዘላለም ሕይወት እንዲኖረው እንጂ እንዳይጠፋ።”',
       cite:'— ዮሐንስ 3፡16',
       months:['መስከረም','ጥቅምት','ኅዳር','ታኅሣሥ','ጥር','የካቲት','መጋቢት','ሚያዝያ','ግንቦት','ሰኔ','ሐምሌ','ነሐሴ','ጳጉሜ'],
@@ -296,7 +312,7 @@ if ($next !== '' && ($next[0] === '/' || strpos($next, '://') !== false || strpo
     en: {
       tagline:'Student & Attendance Management System',
       welcome:'Welcome back', sub:'Sign in with your account to continue.',
-      username:'Username', password:'Password', uPh:'e.g. master or teacher1',
+      username:'Username', password:'Password', uPh:'Enter your username',
       signin:'Sign in', signing:'Signing in…', forgot:'Forgot your password?',
       recov_title:'Account recovery',
       recov_sub:'Passwords can only be reset by an administrator.',
@@ -304,6 +320,7 @@ if ($next !== '' && ($next[0] === '/' || strpos($next, '://') !== false || strpo
       back:'Back to sign in',
       empty:'Please enter both your username and password.',
       net:'Could not reach the server. Check your connection and try again.',
+      caps:'Caps Lock is on',
       verse:'“For God so loved the world that he gave his one and only Son, that whoever believes in him shall not perish but have eternal life.”',
       cite:'— John 3:16',
       months:['Meskerem','Tikimt','Hidar','Tahsas','Tir','Yekatit','Megabit','Miazia','Ginbot','Sene','Hamle','Nehase','Pagume'],
@@ -329,6 +346,7 @@ if ($next !== '' && ($next[0] === '/' || strpos($next, '://') !== false || strpo
     $('#schoolTitle').textContent = nm;
     $('#footText').textContent    = nm;
     $('#u').placeholder           = t.uPh;
+    $('#capsHint').textContent = t.caps;
     document.title = nm + ' · ' + t.signin;
   }
   document.querySelectorAll('[data-lang]').forEach(b => b.addEventListener('click', () => {
@@ -337,8 +355,12 @@ if ($next !== '' && ($next[0] === '/' || strpos($next, '://') !== false || strpo
 
   /* password visibility */
   const pw = $('#p');
+  pw.addEventListener('keyup', e => { $('#capsHint').hidden = !e.getModifierState('CapsLock'); });
+  pw.addEventListener('blur', () => { $('#capsHint').hidden = true; });
   $('#eyeBtn').addEventListener('click', () => {
     pw.type = pw.type === 'password' ? 'text' : 'password';
+    $('#eyeBtn').setAttribute('aria-pressed', String(pw.type === 'text'));
+    $('#eyeBtn').setAttribute('aria-label', pw.type === 'text' ? 'Hide password' : 'Show password');
     pw.focus();
   });
 
@@ -346,16 +368,19 @@ if ($next !== '' && ($next[0] === '/' || strpos($next, '://') !== false || strpo
   $('#forgotBtn').addEventListener('click', () => {
     $('#signView').style.display = 'none';
     $('#recovPanel').classList.add('show');
+    $('#backBtn').focus();
   });
   $('#backBtn').addEventListener('click', () => {
     $('#recovPanel').classList.remove('show');
     $('#signView').style.display = '';
-    $('#u').focus();
+    $('#forgotBtn').focus();
   });
 
   const ERR_AM = {
     bad_credentials : 'የተጠቃሚ ስም ወይም የይለፍ ቃል ትክክል አይደለም።',
     locked          : 'በተደጋጋሚ በተሳሳተ ሙከራ ምክንያት መለያው ለጊዜው ተቆልፏል። እባክዎ ትንሽ ቆይተው ይሞክሩ።',
+    locked_out      : 'ብዙ ሙከራዎች ተደርገዋል። ከ15 ደቂቃ በኋላ ይሞክሩ።',
+    disabled        : 'ይህ መለያ ተሰናክሏል። አስተዳዳሪዎን ያነጋግሩ።',
     inactive        : 'ይህ መለያ ተሰናክሏል። አስተዳዳሪዎን ያነጋግሩ።',
     validation      : 'እባክዎ የተጠቃሚ ስም እና የይለፍ ቃል ያስገቡ።',
     csrf            : 'ክፍለ ጊዜው አልፎበታል። እባክዎ እንደገና ይሞክሩ።',
@@ -373,10 +398,10 @@ if ($next !== '' && ($next[0] === '/' || strpos($next, '://') !== false || strpo
     showErr('');
     const username = $('#u').value.trim();
     const password = $('#p').value;
-    if (!username || !password) { showErr(T[lang].empty); return; }
+    if (!username || !password) { showErr(T[lang].empty); (!username ? $('#u') : $('#p')).focus(); return; }
 
     const btn = $('#submitBtn'), lbl = $('#submitLbl');
-    btn.disabled = true; lbl.textContent = T[lang].signing;
+    btn.disabled = true; btn.setAttribute('aria-busy', 'true'); lbl.textContent = T[lang].signing;
     try {
       const r = await fetch('../api/auth.php', {
         method:'POST', credentials:'same-origin',
@@ -402,7 +427,7 @@ if ($next !== '' && ($next[0] === '/' || strpos($next, '://') !== false || strpo
     } catch (_) {
       showErr(T[lang].net);
     }
-    btn.disabled = false; lbl.textContent = T[lang].signin;
+    btn.disabled = false; btn.removeAttribute('aria-busy'); lbl.textContent = T[lang].signin;
   });
 
   applyLang();

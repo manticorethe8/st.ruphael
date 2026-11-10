@@ -285,7 +285,8 @@ function sr_schema_statements(): array
   success    TINYINT(1) NOT NULL DEFAULT 0,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
-  KEY idx_la_lookup (username, ip_address, created_at)
+  KEY idx_la_lookup (username, ip_address, created_at),
+  KEY idx_la_ip (ip_address, created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
 
 /* -------- role permission defaults (editable by master) --------

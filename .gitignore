@@ -1,0 +1,13 @@
+# Local secrets, database dumps and generated private records
+config/config.local.php
+.env
+.env.*
+!.env.example
+backups/
+uploads/
+exports/*.csv
+exports/*.xlsx
+*.sql
+*.sql.gz
+
+config/installed.lock
